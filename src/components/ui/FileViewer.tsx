@@ -22,7 +22,7 @@ const FileViewer: React.FC = () => {
     searchQueryForFuse,
     fuseScoreThreshold, // Use this directly for the threshold
     highlightColor,
-    isCaseSensitive,
+    isCaseSensitive, // Re-add
   } = useFileStore();
 
   const [pdfFileUrl, setPdfFileUrl] = useState<string | null>(null);
@@ -93,19 +93,16 @@ const FileViewer: React.FC = () => {
     console.log(
       `[FileViewer] Fuse instance recomputing. Threshold: ${fuseScoreThreshold}, Lines count: ${lines.length}, CaseSensitive: ${isCaseSensitive}`
     );
-    // DIAGNOSTIC: Temporarily simplify Fuse options
+    // DIAGNOSTIC: Options adjusted for better substring matching
     return new Fuse(lines, {
       keys: ['text'],
-      includeScore: true,
-      includeMatches: true,
-      threshold: fuseScoreThreshold, // This is 0.4 from logs
-      isCaseSensitive: isCaseSensitive, // Should be false from UI
-      findAllMatches: true, // RESTORED: Find all matches, not just the best one
-      minMatchCharLength: 1, // Explicitly set to 1 (default)
-      // distance: 100, // Default is 100
-      // ignoreLocation: false, // Default is false
+      includeScore: true, // Keep for debugging
+      includeMatches: true, // Keep for debugging
+      threshold: fuseScoreThreshold, // This is the threshold from the UI
+      ignoreLocation: true, // Crucial for substring matching regardless of position
+      isCaseSensitive: isCaseSensitive, // Use value from store
     });
-  }, [lines, fuseScoreThreshold, isCaseSensitive]);
+  }, [lines, fuseScoreThreshold, isCaseSensitive]); // Added isCaseSensitive back
 
   const searchResults = useMemo(() => {
     console.log(
@@ -118,13 +115,38 @@ const FileViewer: React.FC = () => {
       return [];
     }
 
+    // Log the query and a sample line from the source data for comparison
+    console.log(
+      '[FileViewer] JSON.stringified searchQueryForFuse:',
+      JSON.stringify(searchQueryForFuse)
+    );
+    // IMPORTANT: Adjust the index lines[X] to a line you know contains the search query
+    // For example, if your search query is expected in the 2nd line of the file (index 1):
+    if (lines && lines.length > 1 && lines[1]) {
+      // Check if line exists
+      console.log(
+        '[FileViewer] JSON.stringified lines[1].text:',
+        JSON.stringify(lines[1].text)
+      );
+    }
+    // You might need to log a different line index based on your pinegap.txt content
+
     const fuseResults = fuseInstance.search(searchQueryForFuse);
     console.log(
       '[FileViewer] Raw results from fuseInstance.search():',
       fuseResults
     );
+    console.log(`[FileViewer] Count of raw fuseResults: ${fuseResults.length}`);
 
-    return fuseResults
+    // Explicitly filter by score to ensure adherence to the threshold and type safety
+    const filteredByScoreResults = fuseResults.filter(
+      (r) => typeof r.score === 'number' && r.score <= fuseScoreThreshold
+    );
+    console.log(
+      `[FileViewer] Count of results after explicit score filter (score <= ${fuseScoreThreshold}): ${filteredByScoreResults.length}`
+    );
+
+    return filteredByScoreResults
       .map((fuseResult) => {
         // Assuming matches exist and matches[0] is the relevant one for 'text' key
         const matchDetails = fuseResult.matches?.[0];
@@ -136,7 +158,7 @@ const FileViewer: React.FC = () => {
         };
       })
       .filter((result) => result.indices.length > 0); // Only keep results that have match segments
-  }, [searchQueryForFuse, fuseInstance, fuseScoreThreshold]);
+  }, [searchQueryForFuse, fuseInstance, fuseScoreThreshold, lines]);
 
   const renderLineWithHighlights = (lineText: string, lineNumber: number) => {
     const matchesOnThisLine = searchResults.filter(
