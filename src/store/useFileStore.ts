@@ -5,12 +5,12 @@ export type FileType = 'pdf' | 'html' | 'text';
 export interface PdfParameters {
   pageNumber: number;
   scale: number;
-  boxX: number;
-  boxY: number;
-  boxWidth: number;
-  boxHeight: number;
-  pageWidth: number;
-  pageHeight: number;
+  pageWidth: number; // Actual width of the rendered PDF page in pixels
+  pageHeight: number; // Actual height of the rendered PDF page in pixels
+  x: number; // User-defined X for bounding box (absolute pixels)
+  y: number; // User-defined Y for bounding box (absolute pixels)
+  boxWidth: number; // User-defined width for bounding box (absolute pixels)
+  boxHeight: number; // User-defined height for bounding box (absolute pixels)
 }
 
 // States for each file type instance
@@ -66,7 +66,14 @@ interface FileActions {
 }
 
 const initialPdfParameters: PdfParameters = {
-  pageNumber: 1, scale: 1.0, boxX: 0, boxY: 0, boxWidth: 100, boxHeight: 100, pageWidth: 595, pageHeight: 842,
+  pageNumber: 1,
+  scale: 1.0,
+  pageWidth: 595, // Actual width of the rendered PDF page in pixels
+  pageHeight: 842, // Actual height of the rendered PDF page in pixels
+  x: 50, // Default example value
+  y: 50, // Default example value
+  boxWidth: 100, // Default example value
+  boxHeight: 100, // Default example value
 };
 
 const initialFileStateOnly: FileState = {
