@@ -24,8 +24,8 @@ const ControlPanel: React.FC = () => {
     updatePdfParameter,
     searchText,
     setSearchText,
-    levenshteinThreshold,
-    setLevenshteinThreshold,
+    fuseScoreThreshold,
+    setFuseScoreThreshold,
     triggerSearch,
     isCaseSensitive,
     setIsCaseSensitive,
@@ -42,6 +42,11 @@ const ControlPanel: React.FC = () => {
   // Local state for the scale input to allow intermediate values like "1."
   const [scaleDisplayValue, setScaleDisplayValue] = useState<string>(
     pdfParameters.scale.toString()
+  );
+
+  // Local state for the fuse score threshold input
+  const [thresholdDisplayValue, setThresholdDisplayValue] = useState<string>(
+    fuseScoreThreshold.toString()
   );
 
   // Sync scaleDisplayValue with global state if pdfParameters.scale changes externally
@@ -70,6 +75,23 @@ const ControlPanel: React.FC = () => {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pdfParameters.scale]); 
+
+  // Sync thresholdDisplayValue with global state if fuseScoreThreshold changes externally
+  useEffect(() => {
+    const storeValStr = fuseScoreThreshold.toString();
+    // Avoid disrupting user typing intermediate values like "0."
+    if (thresholdDisplayValue.endsWith('.') && Number(thresholdDisplayValue.slice(0, -1)) === fuseScoreThreshold) {
+      return;
+    }
+    if (thresholdDisplayValue.trim() === "" && fuseScoreThreshold === 0.4) { 
+      setThresholdDisplayValue(fuseScoreThreshold.toString()); // Update to store default if empty
+      return;
+    }
+    if (thresholdDisplayValue !== storeValStr) {
+      setThresholdDisplayValue(storeValStr);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fuseScoreThreshold]);
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -205,6 +227,35 @@ const ControlPanel: React.FC = () => {
     }
   };
 
+  const handleThresholdInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { value } = e.target;
+
+    // Allow empty, numbers, and a single decimal point
+    if (value === "" || /^[0-9]*\.?([0-9]+)?$/.test(value)) {
+      setThresholdDisplayValue(value);
+
+      // If it's a valid complete float (not ending in '.'), update the store
+      if (!value.endsWith('.') && value.trim() !== "") {
+        const numVal = parseFloat(value);
+        if (!isNaN(numVal)) {
+          setFuseScoreThreshold(numVal); // This will clamp 0.0-1.0
+        }
+      }
+    }
+  };
+
+  const handleThresholdInputBlur = () => {
+    const numValue = parseFloat(thresholdDisplayValue);
+
+    if (isNaN(numValue)) {
+      setFuseScoreThreshold(0.4); // Default if invalid
+    } else {
+      setFuseScoreThreshold(numValue); // Let store clamp it
+    }
+    // Ensure display value reflects the potentially clamped value from the store
+    setThresholdDisplayValue(useFileStore.getState().fuseScoreThreshold.toString());
+  };
+
   const handleReset = () => {
     resetAllParameters();
     resetFileInput();
@@ -282,16 +333,14 @@ const ControlPanel: React.FC = () => {
             </Button>
           </div>
           <div className="space-y-1">
-            <Label htmlFor="levenshteinThreshold">Match Threshold (0 = exact)</Label>
+            <Label htmlFor="fuseScoreThreshold">Match Score Threshold (0.0 - 1.0)</Label>
             <Input
-              id="levenshteinThreshold"
-              type="number"
-              value={levenshteinThreshold.toString()}
-              onChange={(e) => {
-                const val = parseInt(e.target.value, 10);
-                setLevenshteinThreshold(isNaN(val) || val < 0 ? 0 : val);
-              }}
-              min="0"
+              id="fuseScoreThreshold"
+              type="text" 
+              value={thresholdDisplayValue}
+              onChange={handleThresholdInputChange}
+              onBlur={handleThresholdInputBlur}
+              placeholder="e.g., 0.4 (0.0=exact, 1.0=any)"
             />
           </div>
           <div className="space-y-1">

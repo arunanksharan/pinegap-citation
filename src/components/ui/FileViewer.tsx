@@ -20,7 +20,7 @@ const FileViewer: React.FC = () => {
     pdfParameters,
     setPdfNumPagesForInstance,
     searchQueryForFuse,
-    thresholdForFuse,
+    fuseScoreThreshold, // Use this directly for the threshold
     highlightColor,
     isCaseSensitive,
   } = useFileStore();
@@ -38,6 +38,18 @@ const FileViewer: React.FC = () => {
     }
   }, [activeFile, fileType]);
 
+  useEffect(() => {
+    if (activeFileContent && (fileType === 'text' || fileType === 'html')) {
+      const currentLines = activeFileContent.split('\n').map((line, index) => ({
+        text: line,
+        lineNumber: index + 1,
+      }));
+      console.log('[FileViewer] Lines for Fuse.js:', currentLines);
+    } else {
+      console.log('[FileViewer] No active text/html content for lines.');
+    }
+  }, [activeFileContent, fileType]);
+
   function onDocumentLoadSuccess({ numPages }: { numPages: number }) {
     setPdfNumPagesForInstance(numPages);
     if (pdfParameters.pageNumber > numPages) {
@@ -53,7 +65,8 @@ const FileViewer: React.FC = () => {
   const onPageLoadSuccess: PageProps['onLoadSuccess'] = (page) => {
     if (!page) return;
 
-    const { updatePdfParameter, pdfParameters: currentPdfParams } = useFileStore.getState();
+    const { updatePdfParameter, pdfParameters: currentPdfParams } =
+      useFileStore.getState();
     const viewportWidth = page.width;
     const viewportHeight = page.height;
 
@@ -66,38 +79,64 @@ const FileViewer: React.FC = () => {
   };
 
   const lines = useMemo(() => {
-    if (!activeFileContent) return [];
-    return activeFileContent
-      .split('\n')
-      .map((text, index) => ({ text, lineNumber: index + 1 }));
-  }, [activeFileContent]);
+    if (activeFileContent && (fileType === 'text' || fileType === 'html')) {
+      return activeFileContent
+        .split('\n')
+        .map((text, index) => ({ text, lineNumber: index + 1 }));
+    } else {
+      return [];
+    }
+  }, [activeFileContent, fileType]);
 
   const fuseInstance = useMemo(() => {
     if (!lines || lines.length === 0) return null;
+    console.log(
+      `[FileViewer] Fuse instance recomputing. Threshold: ${fuseScoreThreshold}, Lines count: ${lines.length}, CaseSensitive: ${isCaseSensitive}`
+    );
+    // DIAGNOSTIC: Temporarily simplify Fuse options
     return new Fuse(lines, {
+      keys: ['text'],
       includeScore: true,
       includeMatches: true,
-      threshold: thresholdForFuse,
-      minMatchCharLength: 1,
-      findAllMatches: true,
-      ignoreLocation: true,
-      keys: ['text'],
-      isCaseSensitive: isCaseSensitive,
+      threshold: fuseScoreThreshold, // This is 0.4 from logs
+      isCaseSensitive: isCaseSensitive, // Should be false from UI
+      findAllMatches: true, // RESTORED: Find all matches, not just the best one
+      minMatchCharLength: 1, // Explicitly set to 1 (default)
+      // distance: 100, // Default is 100
+      // ignoreLocation: false, // Default is false
     });
-  }, [lines, thresholdForFuse, isCaseSensitive]);
+  }, [lines, fuseScoreThreshold, isCaseSensitive]);
 
   const searchResults = useMemo(() => {
-    if (!searchQueryForFuse || !fuseInstance) return [];
-
-    const queryToSearch = searchQueryForFuse;
-
-    return fuseInstance.search(queryToSearch).flatMap((result) =>
-      (result.matches || []).map((match) => ({
-        lineNumber: result.item.lineNumber,
-        indices: match.indices,
-      }))
+    console.log(
+      `[FileViewer] SearchResults recomputing. Query: '${searchQueryForFuse}', Fuse Threshold: ${fuseScoreThreshold}`
     );
-  }, [searchQueryForFuse, fuseInstance]);
+    if (!searchQueryForFuse || !fuseInstance) {
+      console.log(
+        '[FileViewer] No search query or fuse instance, returning empty results.'
+      );
+      return [];
+    }
+
+    const fuseResults = fuseInstance.search(searchQueryForFuse);
+    console.log(
+      '[FileViewer] Raw results from fuseInstance.search():',
+      fuseResults
+    );
+
+    return fuseResults
+      .map((fuseResult) => {
+        // Assuming matches exist and matches[0] is the relevant one for 'text' key
+        const matchDetails = fuseResult.matches?.[0];
+        return {
+          lineNumber: fuseResult.item.lineNumber,
+          text: fuseResult.item.text, // Original line text
+          score: fuseResult.score, // Score of the match
+          indices: matchDetails?.indices || [], // Array of [start, end] character indices
+        };
+      })
+      .filter((result) => result.indices.length > 0); // Only keep results that have match segments
+  }, [searchQueryForFuse, fuseInstance, fuseScoreThreshold]);
 
   const renderLineWithHighlights = (lineText: string, lineNumber: number) => {
     const matchesOnThisLine = searchResults.filter(
@@ -180,16 +219,20 @@ const FileViewer: React.FC = () => {
                 pdfParameters.pageHeight > 0 &&
                 pdfParameters.boxWidth > 0 &&
                 pdfParameters.boxHeight > 0 && (
-                <BoundingBox
-                  x={(pdfParameters.x / pdfParameters.pageWidth) * 100}
-                  y={(pdfParameters.y / pdfParameters.pageHeight) * 100}
-                  width={(pdfParameters.boxWidth / pdfParameters.pageWidth) * 100}
-                  height={(pdfParameters.boxHeight / pdfParameters.pageHeight) * 100}
-                  pageWidth={pdfParameters.pageWidth}
-                  pageHeight={pdfParameters.pageHeight}
-                  color={highlightColor}
-                />
-              )}
+                  <BoundingBox
+                    x={(pdfParameters.x / pdfParameters.pageWidth) * 100}
+                    y={(pdfParameters.y / pdfParameters.pageHeight) * 100}
+                    width={
+                      (pdfParameters.boxWidth / pdfParameters.pageWidth) * 100
+                    }
+                    height={
+                      (pdfParameters.boxHeight / pdfParameters.pageHeight) * 100
+                    }
+                    pageWidth={pdfParameters.pageWidth}
+                    pageHeight={pdfParameters.pageHeight}
+                    color={highlightColor}
+                  />
+                )}
             </div>
           </Document>
         ) : (

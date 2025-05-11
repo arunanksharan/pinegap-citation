@@ -39,7 +39,7 @@ interface FileState {
   searchText: string;
   searchQueryForFuse: string; // Actual query to be used by Fuse.js, set on button click
   thresholdForFuse: number;   // Actual threshold to be used by Fuse.js, set on button click
-  levenshteinThreshold: number;
+  fuseScoreThreshold: number;    // Renamed from levenshteinThreshold, stores 0.0-1.0 score
   highlightColor: string;
   isMatchWholeWord: boolean;
   isCaseSensitive: boolean;
@@ -56,7 +56,7 @@ interface FileActions {
   setPdfParameters: (params: Partial<PdfParameters>) => void;
   setSearchText: (text: string) => void;
   triggerSearch: () => void; // New action to trigger search
-  setLevenshteinThreshold: (threshold: number) => void;
+  setFuseScoreThreshold: (threshold: number | string) => void; // Renamed, accepts number or string for parsing
   setHighlightColor: (color: string) => void;
   setIsMatchWholeWord: (isMatchWholeWord: boolean) => void;
   setIsCaseSensitive: (isCaseSensitive: boolean) => void;
@@ -86,8 +86,8 @@ const initialFileStateOnly: FileState = {
   pdfParameters: initialPdfParameters,
   searchText: '',
   searchQueryForFuse: '',
-  thresholdForFuse: 1, // Default to 1 for fuzzy, can be 0 for exact
-  levenshteinThreshold: 0,
+  thresholdForFuse: 0.4, // Default to 0.4, will be updated by fuseScoreThreshold
+  fuseScoreThreshold: 0.4,   // Renamed, default float value 0.0-1.0
   highlightColor: '#FFFF00',
   isMatchWholeWord: true,
   isCaseSensitive: false,
@@ -194,12 +194,23 @@ export const useFileStore = create<FileState & FileActions>((set, get) => ({
     set((state) => ({ pdfParameters: { ...state.pdfParameters, ...params }})),
   setSearchText: (text) => set({ searchText: text }),
   triggerSearch: () => {
-    set((state) => ({
-      searchQueryForFuse: state.searchText,
-      thresholdForFuse: state.levenshteinThreshold,
-    }));
+    set((state) => {
+      console.log(`[useFileStore] Triggering search. searchText: '${state.searchText}', fuseScoreThreshold: ${state.fuseScoreThreshold}`);
+      return {
+        searchQueryForFuse: state.searchText,
+        // thresholdForFuse is no longer the primary way FileViewer gets threshold for Fuse instance
+      };
+    });
   },
-  setLevenshteinThreshold: (threshold) => set({ levenshteinThreshold: threshold }),
+  setFuseScoreThreshold: (value) => { // Renamed and updated logic
+    let numValue = parseFloat(value.toString());
+    if (isNaN(numValue)) {
+      numValue = 0.4; // Default if parsing fails
+    }
+    // Clamp between 0.0 and 1.0
+    numValue = Math.max(0.0, Math.min(1.0, numValue));
+    set({ fuseScoreThreshold: numValue });
+  },
   setHighlightColor: (color) => set({ highlightColor: color }),
   setIsMatchWholeWord: (isMatchWholeWord) => set({ isMatchWholeWord }),
   setIsCaseSensitive: (isCaseSensitive) => set({ isCaseSensitive }),
@@ -207,8 +218,8 @@ export const useFileStore = create<FileState & FileActions>((set, get) => ({
   resetTextParameters: () => set({
     searchText: initialFileStateOnly.searchText,
     searchQueryForFuse: initialFileStateOnly.searchQueryForFuse,
-    levenshteinThreshold: initialFileStateOnly.levenshteinThreshold,
-    thresholdForFuse: initialFileStateOnly.thresholdForFuse,
+    fuseScoreThreshold: initialFileStateOnly.fuseScoreThreshold, // Renamed
+    thresholdForFuse: initialFileStateOnly.fuseScoreThreshold, // Ensure this also uses the correct initial float value
     highlightColor: initialFileStateOnly.highlightColor,
     isMatchWholeWord: initialFileStateOnly.isMatchWholeWord,
     isCaseSensitive: initialFileStateOnly.isCaseSensitive,
