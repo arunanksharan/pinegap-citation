@@ -3,21 +3,14 @@
 import React, { useState, useEffect } from 'react';
 import { useFileStore } from '@/store/useFileStore';
 import { Document, Page, pdfjs } from 'react-pdf';
+import type { PDFPageProxy } from 'pdfjs-dist/types/src/display/api';
 import BoundingBox from './BoundingBox';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 
 // Setup pdfjs worker
-// Try to use the version from the react-pdf package itself if available
-let pdfjsWorkerSrc;
-try {
-  pdfjsWorkerSrc = new URL('pdfjs-dist/build/pdf.worker.min.js', import.meta.url).toString();
-} catch (e) {
-  // Fallback if import.meta.url is not supported or file not found (e.g. older Next.js versions or specific bundlers)
-  pdfjsWorkerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.js`;
-  console.warn('Falling back to unpkg for pdf.js worker. For optimal performance, ensure pdf.worker.min.js is served locally.');
-}
-pdfjs.GlobalWorkerOptions.workerSrc = pdfjsWorkerSrc;
+// Point to the worker file that will be copied to the public directory.
+pdfjs.GlobalWorkerOptions.workerSrc = `/pdf.worker.min.js`;
 
 const FileViewer: React.FC = () => {
   const {
@@ -39,17 +32,18 @@ const FileViewer: React.FC = () => {
     }
   };
 
-  const onPageLoadSuccess = (page: any) => {
+  const onPageLoadSuccess = (page: PDFPageProxy) => {
     // The 'page' object from react-pdf contains originalWidth and originalHeight
     // We can use these to update our store if we want to use actual PDF dimensions
     // For now, we are relying on user input for Page Width/Height for calculations
     // but we can use these to inform the user or for display scaling.
-    console.log('Page loaded:', page.originalWidth, page.originalHeight);
+    const viewport = page.getViewport({ scale: 1 });
+    console.log('Page loaded:', viewport.width, viewport.height);
     // Example: If user hasn't set page dimensions, use the actual ones from the first loaded page.
     // This might be useful for initial setup.
     // if (pdfParameters.pageWidth === initialPdfParameters.pageWidth && pdfParameters.pageHeight === initialPdfParameters.pageHeight) {
-    //   updatePdfParameter('pageWidth', page.originalWidth);
-    //   updatePdfParameter('pageHeight', page.originalHeight);
+    //   updatePdfParameter('pageWidth', viewport.width);
+    //   updatePdfParameter('pageHeight', viewport.height);
     // }
   };
 
