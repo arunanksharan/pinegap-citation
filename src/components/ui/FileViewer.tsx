@@ -133,21 +133,15 @@ const FileViewer: React.FC = () => {
     // You might need to log a different line index based on your pinegap.txt content
 
     const fuseResults = fuseInstance.search(searchQueryForFuse);
-    console.log(
-      '[FileViewer] Raw results from fuseInstance.search():',
-      fuseResults
-    );
-    console.log(`[FileViewer] Count of raw fuseResults: ${fuseResults.length}`);
-
-    // Explicitly filter by score to ensure adherence to the threshold and type safety
-    const filteredByScoreResults = fuseResults.filter(
+    console.log('[FileViewer] Fuse raw results:', fuseResults);
+    // Manual threshold filtering: keep only matches with score <= threshold
+    const filteredResults = fuseResults.filter(
       (r) => typeof r.score === 'number' && r.score <= fuseScoreThreshold
     );
     console.log(
-      `[FileViewer] Count of results after explicit score filter (score <= ${fuseScoreThreshold}): ${filteredByScoreResults.length}`
+      `[FileViewer] Results after manual threshold filter (score <= ${fuseScoreThreshold}): ${filteredResults.length}`
     );
-
-    return filteredByScoreResults
+    return filteredResults
       .map((fuseResult) => {
         // Assuming matches exist and matches[0] is the relevant one for 'text' key
         const matchDetails = fuseResult.matches?.[0];
