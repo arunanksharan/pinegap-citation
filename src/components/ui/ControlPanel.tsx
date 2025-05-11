@@ -32,9 +32,24 @@ const ControlPanel: React.FC = () => {
     setUploadedFileAndSyncActive, // New action
     resetTextParameters,
     resetAllParameters,
+    // Actions for debounced values
+    setDebouncedSearchText,
+    setDebouncedLevenshteinThreshold,
   } = useFileStore();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Debounce logic for searchText and levenshteinThreshold
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearchText(searchText);
+      setDebouncedLevenshteinThreshold(levenshteinThreshold);
+    }, 500); // 500ms delay
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [searchText, levenshteinThreshold, setDebouncedSearchText, setDebouncedLevenshteinThreshold]);
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];

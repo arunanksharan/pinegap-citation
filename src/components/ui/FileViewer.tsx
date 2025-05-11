@@ -10,7 +10,7 @@ import Levenshtein from 'fast-levenshtein';
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
-  import.meta.url,
+  import.meta.url
 ).toString();
 
 const FileViewer: React.FC = () => {
@@ -22,8 +22,8 @@ const FileViewer: React.FC = () => {
     pdfParameters,
     updatePdfParameter,
     setPdfNumPagesForInstance, // New action to set numPages for the PDF instance
-    searchText,
-    levenshteinThreshold,
+    debouncedSearchText: searchText, // Rename for convenience within this component
+    debouncedLevenshteinThreshold: levenshteinThreshold, // Rename for convenience
     highlightColor,
     isCaseSensitive,
   } = useFileStore();
@@ -34,21 +34,33 @@ const FileViewer: React.FC = () => {
   // Effect to reset render dimensions when the active PDF file changes
   useEffect(() => {
     if (fileType === 'pdf') {
-        setPageRenderWidth(null);
-        setPageRenderHeight(null);
+      setPageRenderWidth(null);
+      setPageRenderHeight(null);
     } // For text/html, these are not used currently
   }, [activeFile, fileType]);
 
+  const onDocumentLoadSuccess = useCallback(
+    ({ numPages: loadedNumPages }: { numPages: number }) => {
+      setPdfNumPagesForInstance(loadedNumPages); // Update the specific PDF instance's page count
+      // Automatically set page number to 1 if it's out of bounds or initial load for this PDF
+      if (
+        pdfParameters.pageNumber > loadedNumPages ||
+        pdfParameters.pageNumber < 1 ||
+        activeNumPages === null
+      ) {
+        updatePdfParameter('pageNumber', 1);
+      }
+    },
+    [
+      setPdfNumPagesForInstance,
+      updatePdfParameter,
+      pdfParameters.pageNumber,
+      activeNumPages,
+    ]
+  );
 
-  const onDocumentLoadSuccess = useCallback(({ numPages: loadedNumPages }: { numPages: number }) => {
-    setPdfNumPagesForInstance(loadedNumPages); // Update the specific PDF instance's page count
-    // Automatically set page number to 1 if it's out of bounds or initial load for this PDF
-    if (pdfParameters.pageNumber > loadedNumPages || pdfParameters.pageNumber < 1 || activeNumPages === null) {
-      updatePdfParameter('pageNumber', 1);
-    }
-  }, [setPdfNumPagesForInstance, updatePdfParameter, pdfParameters.pageNumber, activeNumPages]);
-
-  const onPageLoadSuccess = (page: PDFPageProxy) => { // Typed page parameter
+  const onPageLoadSuccess = (page: PDFPageProxy) => {
+    // Typed page parameter
     // Store the natural dimensions of the PDF page, scaled by the current scale factor
     const viewport = page.getViewport({ scale: 1 });
     updatePdfParameter('pageWidth', viewport.width);
@@ -64,19 +76,35 @@ const FileViewer: React.FC = () => {
     }
   };
 
-  const boxXPercent = pageRenderWidth && pdfParameters.pageWidth ? (pdfParameters.boxX / pdfParameters.pageWidth) * 100 : 0;
-  const boxYPercent = pageRenderHeight && pdfParameters.pageHeight ? (pdfParameters.boxY / pdfParameters.pageHeight) * 100 : 0;
-  const boxWidthPercent = pageRenderWidth && pdfParameters.pageWidth ? (pdfParameters.boxWidth / pdfParameters.pageWidth) * 100 : 0;
-  const boxHeightPercent = pageRenderHeight && pdfParameters.pageHeight ? (pdfParameters.boxHeight / pdfParameters.pageHeight) * 100 : 0;
+  const boxXPercent =
+    pageRenderWidth && pdfParameters.pageWidth
+      ? (pdfParameters.boxX / pdfParameters.pageWidth) * 100
+      : 0;
+  const boxYPercent =
+    pageRenderHeight && pdfParameters.pageHeight
+      ? (pdfParameters.boxY / pdfParameters.pageHeight) * 100
+      : 0;
+  const boxWidthPercent =
+    pageRenderWidth && pdfParameters.pageWidth
+      ? (pdfParameters.boxWidth / pdfParameters.pageWidth) * 100
+      : 0;
+  const boxHeightPercent =
+    pageRenderHeight && pdfParameters.pageHeight
+      ? (pdfParameters.boxHeight / pdfParameters.pageHeight) * 100
+      : 0;
 
   if (!fileType) {
-    return <div className="w-full p-4 flex-grow h-full flex items-center justify-center bg-gray-200 border-l border-gray-300 text-gray-500">Select a file type to begin.</div>;
+    return (
+      <div className="w-full p-4 flex-grow h-full flex items-center justify-center bg-gray-200 border-l border-gray-300 text-gray-500">
+        Select a file type to begin.
+      </div>
+    );
   }
 
   return (
     <div className="w-full p-0 relative flex-grow h-full overflow-auto bg-gray-200 border-l border-gray-300">
-      {fileType === 'pdf' && (
-        activeFile && activeFile.type === 'application/pdf' ? (
+      {fileType === 'pdf' &&
+        (activeFile && activeFile.type === 'application/pdf' ? (
           <div
             className="w-full h-full overflow-y-scroll relative"
             id="pdf-viewer-container"
@@ -84,7 +112,9 @@ const FileViewer: React.FC = () => {
             <Document
               file={activeFile} // Use activeFile
               onLoadSuccess={onDocumentLoadSuccess}
-              onLoadError={(error) => console.error('Error loading PDF:', error)}
+              onLoadError={(error) =>
+                console.error('Error loading PDF:', error)
+              }
               options={{ CMapReaderFactory: null }} // Example option, adjust as needed
             >
               <Page
@@ -113,45 +143,81 @@ const FileViewer: React.FC = () => {
           </div>
         ) : (
           <div className="w-full h-full flex items-center justify-center text-gray-500">
-            {activeFile ? "Waiting for a valid PDF file..." : "Upload a PDF file to view it here."}
+            {activeFile
+              ? 'Waiting for a valid PDF file...'
+              : 'Upload a PDF file to view it here.'}
           </div>
-        )
-      )}
+        ))}
 
-      {(fileType === 'text' || fileType === 'html') && (
-        activeFileContent ? (
+      {(fileType === 'text' || fileType === 'html') &&
+        (activeFileContent ? (
           <div className="w-full h-full p-4 overflow-y-auto whitespace-pre-wrap font-mono text-sm">
             {searchText && searchText.trim() !== ''
               ? (() => {
                   const segments = [];
                   let lastIndex = 0;
-                  const searchTarget = isCaseSensitive ? searchText : searchText.toLowerCase();
-                  const contentToSearch = isCaseSensitive ? activeFileContent : activeFileContent.toLowerCase();
+                  const searchTarget = isCaseSensitive
+                    ? searchText
+                    : searchText.toLowerCase();
+                  const contentToSearch = isCaseSensitive
+                    ? activeFileContent
+                    : activeFileContent.toLowerCase();
                   const searchLength = searchTarget.length;
 
-                  console.log('[Highlight Debug] Search Initiated');
-                  console.log('[Highlight Debug] searchText (original):', searchText);
-                  console.log('[Highlight Debug] isCaseSensitive:', isCaseSensitive);
-                  console.log('[Highlight Debug] levenshteinThreshold:', levenshteinThreshold);
-                  console.log('[Highlight Debug] searchTarget (processed):', searchTarget);
-                  console.log('[Highlight Debug] contentToSearch (processed snippet):', contentToSearch.substring(0, 200)); // Log first 200 chars
+                  console.log('[Highlight Debug] Search Initiated (Debounced)');
+                  console.log(
+                    '[Highlight Debug] searchText (debounced):',
+                    searchText
+                  );
+                  console.log(
+                    '[Highlight Debug] isCaseSensitive:',
+                    isCaseSensitive
+                  );
+                  console.log(
+                    '[Highlight Debug] levenshteinThreshold (debounced):',
+                    levenshteinThreshold
+                  );
+                  console.log(
+                    '[Highlight Debug] searchTarget (processed):',
+                    searchTarget
+                  );
+                  console.log(
+                    '[Highlight Debug] contentToSearch (processed snippet):',
+                    contentToSearch.substring(0, 200)
+                  ); // Log first 200 chars
                   console.log('[Highlight Debug] searchLength:', searchLength);
 
                   if (searchLength === 0) return <>{activeFileContent}</>;
 
-                  for (let i = 0; i <= contentToSearch.length - searchLength; ) {
-                    const window = contentToSearch.substring(i, i + searchLength);
+                  for (
+                    let i = 0;
+                    i <= contentToSearch.length - searchLength;
+
+                  ) {
+                    const window = contentToSearch.substring(
+                      i,
+                      i + searchLength
+                    );
                     const distance = Levenshtein.get(window, searchTarget);
 
-                    if (window.toLowerCase().includes('karrinyup') || searchTarget.toLowerCase().includes(window.toLowerCase())) {
+                    if (
+                      window.toLowerCase().includes('karrinyup') ||
+                      searchTarget.toLowerCase().includes(window.toLowerCase())
+                    ) {
                       console.log(`[Highlight Debug] Iteration i=${i}:`);
-                      console.log(`[Highlight Debug]   Window: '${window}' (length: ${window.length})`);
-                      console.log(`[Highlight Debug]   SearchTarget: '${searchTarget}' (length: ${searchTarget.length})`);
+                      console.log(
+                        `[Highlight Debug]   Window: '${window}' (length: ${window.length})`
+                      );
+                      console.log(
+                        `[Highlight Debug]   SearchTarget: '${searchTarget}' (length: ${searchTarget.length})`
+                      );
                       console.log(`[Highlight Debug]   Distance: ${distance}`);
                     }
 
                     if (distance <= levenshteinThreshold) {
-                      console.log(`[Highlight Debug] Match found at index ${i}! Window: '${window}'`); // Log match
+                      console.log(
+                        `[Highlight Debug] Match found at index ${i}! Window: '${window}' (Debounced search)`
+                      ); // Log match
                       if (i > lastIndex) {
                         segments.push(
                           <React.Fragment key={`pre-${lastIndex}`}>
@@ -190,10 +256,10 @@ const FileViewer: React.FC = () => {
           </div>
         ) : (
           <div className="w-full h-full flex items-center justify-center text-gray-500">
-            Upload a {fileType === 'text' ? '.txt' : '.html'} file to view its content.
+            Upload a {fileType === 'text' ? '.txt' : '.html'} file to view its
+            content.
           </div>
-        )
-      )}
+        ))}
     </div>
   );
 };

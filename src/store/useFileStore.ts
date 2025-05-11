@@ -37,7 +37,9 @@ interface FileState {
 
   pdfParameters: PdfParameters; // Remains for PDF specific UI controls
   searchText: string;
+  debouncedSearchText: string; // New
   levenshteinThreshold: number;
+  debouncedLevenshteinThreshold: number; // New
   highlightColor: string;
   isMatchWholeWord: boolean;
   isCaseSensitive: boolean;
@@ -52,7 +54,9 @@ interface FileActions {
   updatePdfParameter: <K extends keyof PdfParameters>(key: K, value: PdfParameters[K]) => void;
   setPdfParameters: (params: Partial<PdfParameters>) => void;
   setSearchText: (text: string) => void;
+  setDebouncedSearchText: (text: string) => void; // New
   setLevenshteinThreshold: (threshold: number) => void;
+  setDebouncedLevenshteinThreshold: (threshold: number) => void; // New
   setHighlightColor: (color: string) => void;
   setIsMatchWholeWord: (isMatchWholeWord: boolean) => void;
   setIsCaseSensitive: (isCaseSensitive: boolean) => void;
@@ -73,7 +77,9 @@ const initialFileStateOnly: FileState = {
   textInstance: { file: null, content: null },
   pdfParameters: initialPdfParameters,
   searchText: '',
+  debouncedSearchText: '', // New
   levenshteinThreshold: 0,
+  debouncedLevenshteinThreshold: 0, // New
   highlightColor: '#FFFF00',
   isMatchWholeWord: true,
   isCaseSensitive: false,
@@ -148,14 +154,18 @@ export const useFileStore = create<FileState & FileActions>((set, get) => ({
   setPdfParameters: (params) => 
     set((state) => ({ pdfParameters: { ...state.pdfParameters, ...params }})),
   setSearchText: (text) => set({ searchText: text }),
+  setDebouncedSearchText: (text) => set({ debouncedSearchText: text }), // New
   setLevenshteinThreshold: (threshold) => set({ levenshteinThreshold: threshold }),
+  setDebouncedLevenshteinThreshold: (threshold) => set({ debouncedLevenshteinThreshold: threshold }), // New
   setHighlightColor: (color) => set({ highlightColor: color }),
   setIsMatchWholeWord: (isMatchWholeWord) => set({ isMatchWholeWord }),
   setIsCaseSensitive: (isCaseSensitive) => set({ isCaseSensitive }),
 
   resetTextParameters: () => set({
     searchText: initialFileStateOnly.searchText,
+    debouncedSearchText: initialFileStateOnly.debouncedSearchText, // New
     levenshteinThreshold: initialFileStateOnly.levenshteinThreshold,
+    debouncedLevenshteinThreshold: initialFileStateOnly.debouncedLevenshteinThreshold, // New
     highlightColor: initialFileStateOnly.highlightColor,
     isMatchWholeWord: initialFileStateOnly.isMatchWholeWord,
     isCaseSensitive: initialFileStateOnly.isCaseSensitive,
