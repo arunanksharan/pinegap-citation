@@ -13,6 +13,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
+const fileTypeAcceptMap: Record<FileType, string> = {
+  pdf: '.pdf,application/pdf',
+  html: '.html,.htm,text/html',
+  text: '.txt,text/plain',
+};
+
 const ControlPanel: React.FC = () => {
   const {
     setUploadedFile,
@@ -25,16 +31,62 @@ const ControlPanel: React.FC = () => {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const handleUploadButtonClick = () => {
+    if (fileInputRef.current) {
+      if (fileType && fileTypeAcceptMap[fileType]) {
+        fileInputRef.current.accept = fileTypeAcceptMap[fileType];
+      } else {
+        fileInputRef.current.accept = '*/*';
+      }
+      fileInputRef.current.click();
+    }
+  };
+
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      setUploadedFile(file);
-      // Optionally, auto-detect file type or set a default
-      if (!fileType) {
-        const extension = file.name.split('.').pop()?.toLowerCase();
-        if (extension === 'pdf') setFileType('pdf');
-        // Add more auto-detection if needed
+      const selectedDropdownType = useFileStore.getState().fileType;
+
+      if (selectedDropdownType) {
+        const expectedAcceptString = fileTypeAcceptMap[selectedDropdownType];
+        const acceptedExtensions = expectedAcceptString.split(',').filter(s => s.startsWith('.'));
+        const acceptedMimeTypes = expectedAcceptString.split(',').filter(s => !s.startsWith('.'));
+
+        const fileExtension = `.${file.name.split('.').pop()?.toLowerCase()}`;
+        const fileMimeType = file.type;
+
+        let typeMatches = false;
+        if (acceptedExtensions.includes(fileExtension)) {
+          typeMatches = true;
+        }
+        if (!typeMatches && acceptedMimeTypes.includes(fileMimeType)) {
+          typeMatches = true;
+        }
+
+        if (!typeMatches) {
+          alert(
+            `Error: The selected file ("${file.name}") does not match the expected file type ("${selectedDropdownType.toUpperCase()}").\nPlease select a file matching: ${expectedAcceptString}`
+          );
+          if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+          }
+          return;
+        }
       }
+
+      setUploadedFile(file);
+      const extension = file.name.split('.').pop()?.toLowerCase();
+      if (!selectedDropdownType) {
+        if (extension === 'pdf') setFileType('pdf');
+        else if (extension === 'html' || extension === 'htm') setFileType('html');
+        else if (extension === 'txt') setFileType('text');
+      } else {
+        if ( (extension === 'pdf' && selectedDropdownType === 'pdf') ||
+             ((extension === 'html' || extension === 'htm') && selectedDropdownType === 'html') ||
+             (extension === 'txt' && selectedDropdownType === 'text') ) {
+        }
+      }
+
     }
   };
 
@@ -44,27 +96,20 @@ const ControlPanel: React.FC = () => {
 
   const handleParameterChange = (
     key: keyof PdfParameters,
-    newValue: string // Keep value as string initially for processing
+    newValue: string
   ) => {
     let processedValue: number;
     const currentValue = pdfParameters[key];
 
     if (newValue.trim() === '') {
-      // Bug 1: Handle empty input - set to 0 or 1 for page number
       processedValue = key === 'pageNumber' ? 1 : 0;
     } else {
-      // If current value is 0 and new value starts with "0" followed by a digit (e.g., "05")
-      // and the new value is different from "0"
-      // treat the new digit as the intended value.
       if (
         currentValue === 0 &&
         newValue.length > 1 &&
         newValue !== '0' &&
         newValue.startsWith('0')
       ) {
-        // E.g. currentValue is 0, user types '5', newValue becomes "05".
-        // We want to parse "5" in this specific case.
-        // Also handles cases like "005" -> 5
         let tempVal = newValue;
         while (tempVal.startsWith('0') && tempVal.length > 1) {
           tempVal = tempVal.substring(1);
@@ -75,7 +120,6 @@ const ControlPanel: React.FC = () => {
       }
 
       if (isNaN(processedValue)) {
-        // If somehow still NaN after parseFloat (e.g., "abc"), default it
         processedValue = key === 'pageNumber' ? 1 : 0;
       }
     }
@@ -123,13 +167,12 @@ const ControlPanel: React.FC = () => {
 
       <div className="space-y-2">
         <Button
-          onClick={() => fileInputRef.current?.click()}
+          onClick={handleUploadButtonClick}
           className="w-full"
         >
           Upload File
         </Button>
         <Input
-          id="fileUpload"
           type="file"
           ref={fileInputRef}
           onChange={handleFileChange}
