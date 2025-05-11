@@ -1,0 +1,6 @@
+Run npm run dev.
+Select "Text" as the file type.
+Upload a .txt file.
+Enter some text in the "Search Text" input.
+Adjust the "Match Threshold" (e.g., 0 for exact match, 1 for one edit away, etc.).
+Change the "Highlight Color" using the color picker.
