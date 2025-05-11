@@ -5,6 +5,7 @@ import { useFileStore, FileType, PdfParameters } from '@/store/useFileStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -160,12 +161,12 @@ const ControlPanel: React.FC = () => {
           <h3 className="text-lg font-medium">Text Matching</h3>
           <div className="space-y-1">
             <Label htmlFor="searchText">Search Text</Label>
-            <Input
+            <Textarea
               id="searchText"
-              type="text"
               value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setSearchText(e.target.value)}
               placeholder="Enter text to search..."
+              rows={3} // Add some default rows
             />
           </div>
           <div className="space-y-1">
