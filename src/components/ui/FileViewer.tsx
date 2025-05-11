@@ -7,10 +7,8 @@ import Fuse from 'fuse.js';
 import BoundingBox from './BoundingBox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
-pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-  'pdfjs-dist/build/pdf.worker.min.mjs',
-  import.meta.url
-).toString();
+// Configure PDF.js worker to use the locally served file from the public directory
+pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
 
 const FileViewer: React.FC = () => {
   const {
