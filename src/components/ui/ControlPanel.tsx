@@ -1,28 +1,25 @@
 'use client';
 
-import React, { useRef } from 'react';
+import React, { useRef, useEffect } from 'react';
 import { useFileStore, FileType, PdfParameters } from '@/store/useFileStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
-
-const fileTypeAcceptMap: Record<FileType, string> = {
-  pdf: '.pdf,application/pdf',
-  html: '.html,.htm,text/html',
-  text: '.txt,text/plain',
-};
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch'; // Corrected import path
 
 const ControlPanel: React.FC = () => {
   const {
-    setUploadedFile,
-    setUploadedFileContent,
     fileType,
     setFileType,
     pdfParameters,
     updatePdfParameter,
-    numPages,
     searchText,
     setSearchText,
     levenshteinThreshold,
@@ -31,158 +28,110 @@ const ControlPanel: React.FC = () => {
     setHighlightColor,
     isCaseSensitive,
     setIsCaseSensitive,
+    setUploadedFileAndSyncActive, // New action
+    resetTextParameters,
+    resetAllParameters,
   } = useFileStore();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleUploadButtonClick = () => {
-    if (fileInputRef.current) {
-      if (fileType && fileTypeAcceptMap[fileType]) {
-        fileInputRef.current.accept = fileTypeAcceptMap[fileType];
-      } else {
-        fileInputRef.current.accept = '*/*';
-      }
-      fileInputRef.current.click();
-    }
-  };
-
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      const selectedDropdownType = useFileStore.getState().fileType;
+      const currentSelectedType = useFileStore.getState().fileType;
 
-      if (selectedDropdownType) {
-        const expectedAcceptString = fileTypeAcceptMap[selectedDropdownType];
-        const acceptedExtensions = expectedAcceptString.split(',').filter(s => s.startsWith('.'));
-        const acceptedMimeTypes = expectedAcceptString.split(',').filter(s => !s.startsWith('.'));
+      // Basic type check based on dropdown selection and actual file type
+      let isValidType = false;
+      let fileContent: string | null = null;
 
-        const fileExtension = `.${file.name.split('.').pop()?.toLowerCase()}`;
-        const fileMimeType = file.type;
-
-        let typeMatches = false;
-        if (acceptedExtensions.includes(fileExtension)) {
-          typeMatches = true;
+      if (currentSelectedType === 'pdf' && file.type === 'application/pdf') {
+        isValidType = true;
+      } else if (currentSelectedType === 'text' && (file.type === 'text/plain' || file.name.endsWith('.txt'))) {
+        isValidType = true;
+        try {
+          fileContent = await file.text();
+        } catch (error) {
+          console.error("Error reading text file:", error);
+          alert("Error reading text file.");
+          return;
         }
-        if (!typeMatches && acceptedMimeTypes.includes(fileMimeType)) {
-          typeMatches = true;
-        }
-
-        if (!typeMatches) {
-          alert(
-            `Error: The selected file ("${file.name}") does not match the expected file type ("${selectedDropdownType.toUpperCase()}").\nPlease select a file matching: ${expectedAcceptString}`
-          );
-          if (fileInputRef.current) {
-            fileInputRef.current.value = '';
-          }
+      } else if (currentSelectedType === 'html' && (file.type === 'text/html' || file.name.endsWith('.html'))) {
+        isValidType = true;
+        // HTML content can also be read as text for now, or handled differently later
+        try {
+          fileContent = await file.text(); 
+        } catch (error) {
+          console.error("Error reading html file:", error);
+          alert("Error reading html file.");
           return;
         }
       }
 
-      // Read file content for text-based files
-      if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const textContent = e.target?.result as string;
-          setUploadedFileContent(textContent);
-        };
-        reader.onerror = (e) => {
-          console.error('Error reading file:', e);
-          setUploadedFileContent(null);
-          alert('Error reading the text file.');
-        };
-        reader.readAsText(file);
+      if (isValidType) {
+        setUploadedFileAndSyncActive(file, fileContent);
       } else {
-        // For non-text files (like PDF), ensure content is cleared
-        setUploadedFileContent(null);
-      }
-
-      setUploadedFile(file);
-      const extension = file.name.split('.').pop()?.toLowerCase();
-      if (!selectedDropdownType) {
-        if (extension === 'pdf') setFileType('pdf');
-        else if (extension === 'html' || extension === 'htm') setFileType('html');
-        else if (extension === 'txt') setFileType('text');
-      } else {
-        if ( (extension === 'pdf' && selectedDropdownType === 'pdf') ||
-             ((extension === 'html' || extension === 'htm') && selectedDropdownType === 'html') ||
-             (extension === 'txt' && selectedDropdownType === 'text') ) {
+        alert(`Invalid file type. Expected ${currentSelectedType}, but got ${file.type || 'unknown'}.`);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = ''; // Reset file input
         }
       }
-
+    } else {
+        // If no file is selected (e.g., user cancels dialog), clear potentially existing file for the active type
+        // This might require a new action like `clearActiveFileForType` or careful use of `setUploadedFileAndSyncActive(null, null)`
+        // For now, let's assume setUploadedFileAndSyncActive handles null appropriately or we add it if needed.
     }
   };
 
-  const handleFileTypeChange = (value: string) => {
-    setFileType(value as FileType);
+  const handleUploadButtonClick = () => {
+    fileInputRef.current?.click();
   };
 
   const handleParameterChange = (
     key: keyof PdfParameters,
-    newValue: string
+    value: string
   ) => {
-    let processedValue: number;
-    const currentValue = pdfParameters[key];
-
-    if (newValue.trim() === '') {
-      processedValue = key === 'pageNumber' ? 1 : 0;
-    } else {
-      if (
-        currentValue === 0 &&
-        newValue.length > 1 &&
-        newValue !== '0' &&
-        newValue.startsWith('0')
-      ) {
-        let tempVal = newValue;
-        while (tempVal.startsWith('0') && tempVal.length > 1) {
-          tempVal = tempVal.substring(1);
-        }
-        processedValue = parseFloat(tempVal);
-      } else {
-        processedValue = parseFloat(newValue);
-      }
-
-      if (isNaN(processedValue)) {
-        processedValue = key === 'pageNumber' ? 1 : 0;
-      }
-    }
-
-    if (key === 'pageNumber') {
-      processedValue = Math.round(processedValue);
-      if (numPages !== null && numPages > 0) {
-        if (processedValue < 1) {
-          processedValue = 1;
-        } else if (processedValue > numPages) {
-          processedValue = numPages;
-        }
-      } else {
-        processedValue = 1;
-      }
-    }
-
-    if (key !== 'pageNumber' && processedValue < 0) {
-      processedValue = 0;
-    }
-
-    updatePdfParameter(key, processedValue);
+    const numValue = parseFloat(value);
+    updatePdfParameter(key, isNaN(numValue) ? 0 : numValue);
   };
 
-  return (
-    <div className="p-4 border-r h-full overflow-y-auto space-y-6 bg-slate-50">
-      <h2 className="text-xl font-semibold mb-4">Controls</h2>
+  // Effect to set the accept attribute on the file input when fileType changes
+  useEffect(() => {
+    if (fileInputRef.current) {
+      if (fileType === 'pdf') {
+        fileInputRef.current.accept = '.pdf';
+      } else if (fileType === 'text') {
+        fileInputRef.current.accept = '.txt,text/plain';
+      } else if (fileType === 'html') {
+        fileInputRef.current.accept = '.html,text/html';
+      } else {
+        fileInputRef.current.accept = ''; // Allow all if no specific type or reset
+      }
+    }
+  }, [fileType]);
 
-      <div className="space-y-2">
-        <Label htmlFor="fileType">File Type</Label>
+  return (
+    <div className="w-full p-4 space-y-6 overflow-y-auto bg-gray-100 h-full border-r border-gray-300">
+      <div>
+        <Button onClick={resetAllParameters} className="w-full mb-4" variant="outline">
+            Reset All & Clear File Choice
+        </Button>
+        <Label htmlFor="fileType" className="text-sm font-medium">
+          Select File Type
+        </Label>
         <Select
-          onValueChange={handleFileTypeChange}
-          value={fileType || undefined}
+          value={fileType || ''}
+          onValueChange={(value) => {
+            const newFileType = value as FileType | '';
+            setFileType(newFileType === '' ? null : newFileType);
+          }}
         >
           <SelectTrigger id="fileType">
-            <SelectValue placeholder="Select file type" />
+            <SelectValue placeholder="Select file type..." />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="pdf">PDF</SelectItem>
-            <SelectItem value="html">HTML</SelectItem>
-            <SelectItem value="text">Text</SelectItem>
+            <SelectItem value="text">Text (.txt)</SelectItem>
+            <SelectItem value="html">HTML (.html)</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -206,12 +155,12 @@ const ControlPanel: React.FC = () => {
       )}
 
       {/* Conditional section for Text/HTML specific controls */}
-      {fileType === 'text' && (
+      {(fileType === 'text' || fileType === 'html') && ( // Combined for now as they share search
         <div className="space-y-4 pt-4 border-t">
           <h3 className="text-lg font-medium">Text Matching</h3>
           <div className="space-y-1">
             <Label htmlFor="searchText">Search Text</Label>
-            <Input 
+            <Input
               id="searchText"
               type="text"
               value={searchText}
@@ -224,7 +173,7 @@ const ControlPanel: React.FC = () => {
             <Input 
               id="levenshteinThreshold"
               type="number"
-              value={levenshteinThreshold.toString()} // Input type number expects string value for controlled component
+              value={levenshteinThreshold.toString()} 
               onChange={(e) => {
                 const val = parseInt(e.target.value, 10);
                 setLevenshteinThreshold(isNaN(val) || val < 0 ? 0 : val);
@@ -235,23 +184,21 @@ const ControlPanel: React.FC = () => {
           <div className="space-y-1">
             <Label htmlFor="highlightColor">Highlight Color</Label>
             <Input 
-              id="highlightColor"
-              type="color"
+              id="highlightColor" 
+              type="color" 
               value={highlightColor}
-              onChange={(e) => setHighlightColor(e.target.value)}
-              className="h-10 p-1" // Basic styling for color input
+              onChange={(e) => setHighlightColor(e.target.value)} 
             />
           </div>
-          <div className="flex items-center space-x-2 pt-2">
+          <div className="flex items-center space-x-2">
             <Switch 
-              id="caseSensitive"
-              checked={isCaseSensitive}
-              onCheckedChange={setIsCaseSensitive}
+                id="caseSensitive"
+                checked={isCaseSensitive}
+                onCheckedChange={setIsCaseSensitive}
             />
-            <Label htmlFor="caseSensitive" className="cursor-pointer">
-              Case Sensitive
-            </Label>
+            <Label htmlFor="caseSensitive">Case Sensitive</Label>
           </div>
+          <Button onClick={resetTextParameters} variant="outline" className="w-full">Reset Text Parameters</Button>
         </div>
       )}
 
@@ -267,7 +214,7 @@ const ControlPanel: React.FC = () => {
                 </Label>
                 <Input
                   id={key}
-                  type="text"
+                  type="text" // Keep as text for easier handling of float/int, parsing done in store setter
                   value={pdfParameters[key].toString()}
                   onChange={(e) => handleParameterChange(key, e.target.value)}
                   placeholder={`Enter ${key.toLowerCase()}`}
