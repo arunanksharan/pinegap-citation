@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { useFileStore, FileType, PdfParameters } from '@/store/useFileStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -38,6 +38,38 @@ const ControlPanel: React.FC = () => {
   } = useFileStore();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Local state for the scale input to allow intermediate values like "1."
+  const [scaleDisplayValue, setScaleDisplayValue] = useState<string>(
+    pdfParameters.scale.toString()
+  );
+
+  // Sync scaleDisplayValue with global state if pdfParameters.scale changes externally
+  useEffect(() => {
+    const storeValStr = pdfParameters.scale.toString();
+
+    // Case 1: User is typing an intermediate float string like "1."
+    // If scaleDisplayValue is "X." and pdfParameters.scale is numerically X, let "X." persist.
+    if (scaleDisplayValue.endsWith('.') && Number(scaleDisplayValue.slice(0, -1)) === pdfParameters.scale) {
+      return;
+    }
+
+    // Case 2: User cleared the input, which defaults pdfParameters.scale to 1.
+    // If scaleDisplayValue is empty and the store reflects the default (1 for scale), set display to "1".
+    if (scaleDisplayValue.trim() === "" && pdfParameters.scale === 1) {
+      setScaleDisplayValue("1");
+      return;
+    }
+
+    // Case 3: General synchronization or correcting invalid local state.
+    // If scaleDisplayValue is not identical to the string representation of the store value,
+    // update scaleDisplayValue. This handles external changes to pdfParameters.scale (e.g., reset)
+    // and also resets invalid local text (like "abc") to the store's current valid value.
+    if (scaleDisplayValue !== storeValStr) {
+      setScaleDisplayValue(storeValStr);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pdfParameters.scale]); 
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -132,6 +164,44 @@ const ControlPanel: React.FC = () => {
     } else {
       // If it's a valid number (this handles "05" -> 5, "1." -> 1 etc.), update the store.
       updatePdfParameter(key, numValue);
+    }
+  };
+
+  const handleScaleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = e.target.value;
+    setScaleDisplayValue(newValue);
+
+    const trimmedValue = newValue.trim();
+    if (trimmedValue === "") {
+      // If user clears input, set scale in store to 1 (default for scale)
+      // The display will be empty until blur or next valid input that sets store
+      updatePdfParameter('scale', 1);
+    } else if (!trimmedValue.endsWith('.')) {
+      // If not ending with a decimal, try to parse and update store
+      const num = Number(trimmedValue);
+      if (!isNaN(num)) {
+        updatePdfParameter('scale', num);
+      }
+      // If NaN (e.g. "abc"), store is not updated. Display shows "abc". Blur will fix.
+    }
+    // If ends with '.', store is not updated with a truncated number. Display shows "1.". Blur will fix.
+  };
+
+  const handleScaleInputBlur = () => {
+    const trimmedValue = scaleDisplayValue.trim();
+    if (trimmedValue === "") {
+      updatePdfParameter('scale', 1);
+      setScaleDisplayValue("1");
+    } else {
+      const num = Number(trimmedValue); // "1." becomes 1, "1.2" becomes 1.2
+      if (!isNaN(num)) {
+        updatePdfParameter('scale', num);
+        setScaleDisplayValue(num.toString()); // Sync display with what's in store
+      } else {
+        // Invalid content like "abc", revert to default scale in store and display
+        updatePdfParameter('scale', 1);
+        setScaleDisplayValue("1");
+      }
     }
   };
 
@@ -256,13 +326,24 @@ const ControlPanel: React.FC = () => {
                 <Label htmlFor={key} className="capitalize">
                   {key.replace(/([A-Z])/g, ' $1')} {/* Add space before caps */}
                 </Label>
-                <Input
-                  id={key}
-                  type="text"
-                  value={pdfParameters[key]?.toString() || ''}
-                  onChange={(e) => handleParameterChange(key, e.target.value)}
-                  placeholder={`Enter ${key.toLowerCase()}`}
-                />
+                {key === 'scale' ? (
+                  <Input
+                    id="scale"
+                    type="text" // Use text to allow intermediate states like "1."
+                    value={scaleDisplayValue}
+                    onChange={handleScaleInputChange}
+                    onBlur={handleScaleInputBlur}
+                    placeholder="Enter scale (e.g., 1.0)"
+                  />
+                ) : (
+                  <Input
+                    id={key}
+                    type="text"
+                    value={pdfParameters[key]?.toString() || ''}
+                    onChange={(e) => handleParameterChange(key, e.target.value)}
+                    placeholder={`Enter ${key.toLowerCase()}`}
+                  />
+                )}
               </div>
             )
           )}
