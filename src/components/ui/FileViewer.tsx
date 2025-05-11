@@ -100,6 +100,7 @@ const FileViewer: React.FC = () => {
       includeMatches: true, // Keep for debugging
       threshold: fuseScoreThreshold, // This is the threshold from the UI
       ignoreLocation: true, // Crucial for substring matching regardless of position
+      ignoreFieldNorm: true, // Disable field length penalty for long text matches
       isCaseSensitive: isCaseSensitive, // Use value from store
     });
   }, [lines, fuseScoreThreshold, isCaseSensitive]); // Added isCaseSensitive back
