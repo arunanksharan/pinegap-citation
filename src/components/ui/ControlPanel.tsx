@@ -111,8 +111,28 @@ const ControlPanel: React.FC = () => {
     key: keyof PdfParameters,
     value: string
   ) => {
-    const numValue = parseFloat(value);
-    updatePdfParameter(key, isNaN(numValue) ? (pdfParameters[key] || 0) : numValue);
+    // If the user clears the input (empty string after trim)
+    if (value.trim() === "") {
+      if (key === 'scale') {
+        updatePdfParameter('scale', 1); // Default scale to 1 if cleared
+      } else {
+        updatePdfParameter(key, 0); // Default other params to 0 if cleared
+      }
+      return;
+    }
+
+    // Attempt to convert the input value to a number.
+    const numValue = Number(value);
+
+    // If the conversion results in NaN (e.g., invalid characters like "abc" or just "-"),
+    // update the store with its current value. This makes the input field revert to the
+    // last valid numeric state if an invalid character is typed.
+    if (isNaN(numValue)) {
+      updatePdfParameter(key, pdfParameters[key]); 
+    } else {
+      // If it's a valid number (this handles "05" -> 5, "1." -> 1 etc.), update the store.
+      updatePdfParameter(key, numValue);
+    }
   };
 
   const handleReset = () => {
