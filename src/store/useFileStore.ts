@@ -37,31 +37,32 @@ interface FileState {
 
   pdfParameters: PdfParameters; // Remains for PDF specific UI controls
   searchText: string;
-  debouncedSearchText: string; // New
+  searchQueryForFuse: string; // Actual query to be used by Fuse.js, set on button click
+  thresholdForFuse: number;   // Actual threshold to be used by Fuse.js, set on button click
   levenshteinThreshold: number;
-  debouncedLevenshteinThreshold: number; // New
   highlightColor: string;
   isMatchWholeWord: boolean;
   isCaseSensitive: boolean;
+  fileInputKey: number; // Added for resetting file input
 }
 
 interface FileActions {
   setFileType: (type: FileType | null) => void;
   // Action to set a newly uploaded file and its content, and update active states if type matches
-  setUploadedFileAndSyncActive: (uploadedFile: File, uploadedContent: string | null) => void;
+  setUploadedFileAndSyncActive: (uploadedFile: File | null, uploadedContent: string | null) => void;
   setPdfNumPagesForInstance: (pages: number | null) => void; // Updates pdfInstance.numPages
 
   updatePdfParameter: <K extends keyof PdfParameters>(key: K, value: PdfParameters[K]) => void;
   setPdfParameters: (params: Partial<PdfParameters>) => void;
   setSearchText: (text: string) => void;
-  setDebouncedSearchText: (text: string) => void; // New
+  triggerSearch: () => void; // New action to trigger search
   setLevenshteinThreshold: (threshold: number) => void;
-  setDebouncedLevenshteinThreshold: (threshold: number) => void; // New
   setHighlightColor: (color: string) => void;
   setIsMatchWholeWord: (isMatchWholeWord: boolean) => void;
   setIsCaseSensitive: (isCaseSensitive: boolean) => void;
   resetTextParameters: () => void;
   resetAllParameters: () => void;
+  resetFileInput: () => void; // Added for resetting file input
 }
 
 const initialPdfParameters: PdfParameters = {
@@ -77,12 +78,13 @@ const initialFileStateOnly: FileState = {
   textInstance: { file: null, content: null },
   pdfParameters: initialPdfParameters,
   searchText: '',
-  debouncedSearchText: '', // New
+  searchQueryForFuse: '',
+  thresholdForFuse: 1, // Default to 1 for fuzzy, can be 0 for exact
   levenshteinThreshold: 0,
-  debouncedLevenshteinThreshold: 0, // New
   highlightColor: '#FFFF00',
   isMatchWholeWord: true,
   isCaseSensitive: false,
+  fileInputKey: 0, // Added for resetting file input
 };
 
 export const useFileStore = create<FileState & FileActions>((set, get) => ({
@@ -114,9 +116,39 @@ export const useFileStore = create<FileState & FileActions>((set, get) => ({
 
   setUploadedFileAndSyncActive: (uploadedFile, uploadedContent) => {
     const currentFileType = get().fileType;
-    const actualFileType = uploadedFile.type === 'application/pdf' ? 'pdf' 
-                         : (uploadedFile.type === 'text/plain' || uploadedFile.name.endsWith('.txt')) ? 'text' 
-                         : (uploadedFile.type === 'text/html' || uploadedFile.name.endsWith('.html')) ? 'html' 
+
+    if (!uploadedFile) {
+      // Handle the case where the file input is cleared or no file is selected
+      if (currentFileType === 'pdf') {
+        set(state => ({
+          pdfInstance: { file: null, numPages: null },
+          activeFile: state.fileType === 'pdf' ? null : state.activeFile,
+          activeNumPages: state.fileType === 'pdf' ? null : state.activeNumPages,
+          activeFileContent: state.fileType === 'pdf' ? null : state.activeFileContent, // Ensure text content is cleared if PDF was active
+        }));
+      } else if (currentFileType === 'text') {
+        set(state => ({
+          textInstance: { file: null, content: null },
+          activeFile: state.fileType === 'text' ? null : state.activeFile,
+          activeFileContent: state.fileType === 'text' ? null : state.activeFileContent,
+          activeNumPages: state.fileType === 'text' ? null : state.activeNumPages, // Ensure PDF pages are cleared if text was active
+        }));
+      } else if (currentFileType === 'html') {
+        // Placeholder for HTML clearing logic - assuming similar pattern
+        set(state => ({
+          // htmlInstance: { file: null, content: null }, // When htmlInstance is added
+          activeFile: state.fileType === 'html' ? null : state.activeFile,
+          activeFileContent: state.fileType === 'html' ? null : state.activeFileContent,
+          activeNumPages: state.fileType === 'html' ? null : state.activeNumPages,
+        }));
+      }
+      return; // Exit early as there's no file to process
+    }
+
+    // If uploadedFile is not null, proceed with determining its type
+    const actualFileType = uploadedFile.type === 'application/pdf' ? 'pdf'
+                         : (uploadedFile.type === 'text/plain' || uploadedFile.name.endsWith('.txt')) ? 'text'
+                         : (uploadedFile.type === 'text/html' || uploadedFile.name.endsWith('.html')) ? 'html'
                          : null;
 
     if (actualFileType === 'pdf') {
@@ -154,18 +186,22 @@ export const useFileStore = create<FileState & FileActions>((set, get) => ({
   setPdfParameters: (params) => 
     set((state) => ({ pdfParameters: { ...state.pdfParameters, ...params }})),
   setSearchText: (text) => set({ searchText: text }),
-  setDebouncedSearchText: (text) => set({ debouncedSearchText: text }), // New
+  triggerSearch: () => {
+    set((state) => ({
+      searchQueryForFuse: state.searchText,
+      thresholdForFuse: state.levenshteinThreshold,
+    }));
+  },
   setLevenshteinThreshold: (threshold) => set({ levenshteinThreshold: threshold }),
-  setDebouncedLevenshteinThreshold: (threshold) => set({ debouncedLevenshteinThreshold: threshold }), // New
   setHighlightColor: (color) => set({ highlightColor: color }),
   setIsMatchWholeWord: (isMatchWholeWord) => set({ isMatchWholeWord }),
   setIsCaseSensitive: (isCaseSensitive) => set({ isCaseSensitive }),
 
   resetTextParameters: () => set({
     searchText: initialFileStateOnly.searchText,
-    debouncedSearchText: initialFileStateOnly.debouncedSearchText, // New
+    searchQueryForFuse: initialFileStateOnly.searchQueryForFuse,
     levenshteinThreshold: initialFileStateOnly.levenshteinThreshold,
-    debouncedLevenshteinThreshold: initialFileStateOnly.debouncedLevenshteinThreshold, // New
+    thresholdForFuse: initialFileStateOnly.thresholdForFuse,
     highlightColor: initialFileStateOnly.highlightColor,
     isMatchWholeWord: initialFileStateOnly.isMatchWholeWord,
     isCaseSensitive: initialFileStateOnly.isCaseSensitive,
@@ -174,5 +210,7 @@ export const useFileStore = create<FileState & FileActions>((set, get) => ({
     // When resetting all, also clear the active file type choice
     get().setFileType(null); // This will clear activeFile, activeFileContent, activeNumPages
     set(initialFileStateOnly); // Then reset all instances and parameters
+    get().resetFileInput(); // Ensure file input is also reset
   },
+  resetFileInput: () => set((state) => ({ fileInputKey: state.fileInputKey + 1 })), // Added implementation
 }));
