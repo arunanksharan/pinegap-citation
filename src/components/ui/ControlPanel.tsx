@@ -2,16 +2,16 @@
 
 import React, { useRef } from 'react';
 import { useFileStore, FileType, PdfParameters } from '@/store/useFileStore';
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from '@/components/ui/select';
 
 const ControlPanel: React.FC = () => {
   const {
@@ -20,6 +20,7 @@ const ControlPanel: React.FC = () => {
     setFileType,
     pdfParameters,
     updatePdfParameter,
+    numPages,
   } = useFileStore();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -43,12 +44,60 @@ const ControlPanel: React.FC = () => {
 
   const handleParameterChange = (
     key: keyof PdfParameters,
-    value: string
+    newValue: string // Keep value as string initially for processing
   ) => {
-    const numValue = parseFloat(value);
-    if (!isNaN(numValue)) {
-      updatePdfParameter(key, numValue);
+    let processedValue: number;
+    const currentValue = pdfParameters[key];
+
+    if (newValue.trim() === '') {
+      // Bug 1: Handle empty input - set to 0 or 1 for page number
+      processedValue = key === 'pageNumber' ? 1 : 0;
+    } else {
+      // If current value is 0 and new value starts with "0" followed by a digit (e.g., "05")
+      // and the new value is different from "0"
+      // treat the new digit as the intended value.
+      if (
+        currentValue === 0 &&
+        newValue.length > 1 &&
+        newValue !== '0' &&
+        newValue.startsWith('0')
+      ) {
+        // E.g. currentValue is 0, user types '5', newValue becomes "05".
+        // We want to parse "5" in this specific case.
+        // Also handles cases like "005" -> 5
+        let tempVal = newValue;
+        while (tempVal.startsWith('0') && tempVal.length > 1) {
+          tempVal = tempVal.substring(1);
+        }
+        processedValue = parseFloat(tempVal);
+      } else {
+        processedValue = parseFloat(newValue);
+      }
+
+      if (isNaN(processedValue)) {
+        // If somehow still NaN after parseFloat (e.g., "abc"), default it
+        processedValue = key === 'pageNumber' ? 1 : 0;
+      }
     }
+
+    if (key === 'pageNumber') {
+      processedValue = Math.round(processedValue);
+      if (numPages !== null && numPages > 0) {
+        if (processedValue < 1) {
+          processedValue = 1;
+        } else if (processedValue > numPages) {
+          processedValue = numPages;
+        }
+      } else {
+        processedValue = 1;
+      }
+    }
+
+    if (key !== 'pageNumber' && processedValue < 0) {
+      processedValue = 0;
+    }
+
+    updatePdfParameter(key, processedValue);
   };
 
   return (
@@ -57,7 +106,10 @@ const ControlPanel: React.FC = () => {
 
       <div className="space-y-2">
         <Label htmlFor="fileType">File Type</Label>
-        <Select onValueChange={handleFileTypeChange} value={fileType || undefined}>
+        <Select
+          onValueChange={handleFileTypeChange}
+          value={fileType || undefined}
+        >
           <SelectTrigger id="fileType">
             <SelectValue placeholder="Select file type" />
           </SelectTrigger>
@@ -70,7 +122,10 @@ const ControlPanel: React.FC = () => {
       </div>
 
       <div className="space-y-2">
-        <Button onClick={() => fileInputRef.current?.click()} className="w-full">
+        <Button
+          onClick={() => fileInputRef.current?.click()}
+          className="w-full"
+        >
           Upload File
         </Button>
         <Input
@@ -79,26 +134,27 @@ const ControlPanel: React.FC = () => {
           ref={fileInputRef}
           onChange={handleFileChange}
           className="hidden"
-          // Consider adding accept attributes, e.g., accept=".pdf,.html,.txt"
         />
       </div>
 
       <div className="space-y-4 pt-4 border-t">
         <h3 className="text-lg font-medium">Parameters</h3>
-        {(Object.keys(pdfParameters) as Array<keyof PdfParameters>).map((key) => (
-          <div key={key} className="space-y-1">
-            <Label htmlFor={key} className="capitalize">
-              {key.replace(/([A-Z])/g, ' $1').trim()} {/* Adds space before caps */}
-            </Label>
-            <Input
-              id={key}
-              type="number"
-              value={pdfParameters[key]}
-              onChange={(e) => handleParameterChange(key, e.target.value)}
-              placeholder={`Enter ${key.toLowerCase()}`}
-            />
-          </div>
-        ))}
+        {(Object.keys(pdfParameters) as Array<keyof PdfParameters>).map(
+          (key) => (
+            <div key={key} className="space-y-1">
+              <Label htmlFor={key} className="capitalize">
+                {key.replace(/([A-Z])/g, ' $1').trim()}
+              </Label>
+              <Input
+                id={key}
+                type="text"
+                value={pdfParameters[key].toString()}
+                onChange={(e) => handleParameterChange(key, e.target.value)}
+                placeholder={`Enter ${key.toLowerCase()}`}
+              />
+            </div>
+          )
+        )}
       </div>
     </div>
   );

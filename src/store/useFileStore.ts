@@ -16,10 +16,12 @@ interface FileState {
   uploadedFile: File | null;
   fileType: FileType | null;
   pdfParameters: PdfParameters;
+  numPages: number | null;
   setUploadedFile: (file: File | null) => void;
   setFileType: (type: FileType | null) => void;
   updatePdfParameter: <K extends keyof PdfParameters>(key: K, value: PdfParameters[K]) => void;
   setPdfParameters: (params: Partial<PdfParameters>) => void; // To update multiple params at once
+  setNumPages: (pages: number | null) => void;
   resetState: () => void;
 }
 
@@ -37,10 +39,12 @@ export const useFileStore = create<FileState>((set) => ({
   uploadedFile: null,
   fileType: null,
   pdfParameters: initialPdfParameters,
+  numPages: null,
   setUploadedFile: (file) => {
     set({ uploadedFile: file });
     // Reset parameters when a new file is uploaded, or decide if this is desired behavior
     // set({ pdfParameters: initialPdfParameters }); 
+    set({ numPages: null }); // Also reset numPages when a new file is uploaded
   },
   setFileType: (type) => set({ fileType: type }),
   updatePdfParameter: (key, value) =>
@@ -51,9 +55,11 @@ export const useFileStore = create<FileState>((set) => ({
     set((state) => ({
       pdfParameters: { ...state.pdfParameters, ...params },
     })),
+  setNumPages: (pages) => set({ numPages: pages }),
   resetState: () => set({
     uploadedFile: null,
     fileType: null,
     pdfParameters: initialPdfParameters,
+    numPages: null, // Reset numPages here as well
   }),
 }));

@@ -17,17 +17,18 @@ const FileViewer: React.FC = () => {
     uploadedFile,
     fileType,
     pdfParameters,
-    updatePdfParameter
+    updatePdfParameter,
+    numPages,
+    setNumPages,
   } = useFileStore();
 
-  const [numPages, setNumPages] = useState<number | null>(null);
   const [pageRenderWidth, setPageRenderWidth] = useState<number | null>(null);
   const [pageRenderHeight, setPageRenderHeight] = useState<number | null>(null);
 
-  const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
-    setNumPages(numPages);
+  const onDocumentLoadSuccess = ({ numPages: loadedNumPages }: { numPages: number }) => {
+    setNumPages(loadedNumPages);
     // Automatically set page number to 1 if it's out of bounds
-    if (pdfParameters.pageNumber > numPages || pdfParameters.pageNumber < 1) {
+    if (pdfParameters.pageNumber > loadedNumPages || pdfParameters.pageNumber < 1) {
       updatePdfParameter('pageNumber', 1);
     }
   };
@@ -58,8 +59,7 @@ const FileViewer: React.FC = () => {
   };
 
   useEffect(() => {
-    // Reset numPages when file changes
-    setNumPages(null);
+    // Reset numPages when file changes - this is handled by the store's setUploadedFile now
     setPageRenderWidth(null);
     setPageRenderHeight(null);
   }, [uploadedFile]);
@@ -107,7 +107,7 @@ const FileViewer: React.FC = () => {
                 />
               )}
             </div>
-             {numPages && (
+             {numPages !== null && (
                 <div className="absolute bottom-4 right-4 bg-black bg-opacity-50 text-white px-2 py-1 rounded">
                     Page {pdfParameters.pageNumber} of {numPages}
                 </div>
