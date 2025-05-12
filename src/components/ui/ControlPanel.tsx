@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useRef, useState, useEffect } from 'react';
-import { useFileStore, FileType, PdfParameters } from '@/store/useFileStore';
+import { useFileStore, FileType, PdfParameters, HtmlParameters } from '@/store/useFileStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -22,6 +22,8 @@ const ControlPanel: React.FC = () => {
     setUploadedFileAndSyncActive,
     pdfParameters,
     updatePdfParameter,
+    htmlParameters,
+    updateHtmlParameter,
     searchText,
     setSearchText,
     fuseScoreThreshold,
@@ -39,59 +41,62 @@ const ControlPanel: React.FC = () => {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Local state for the scale input to allow intermediate values like "1."
   const [scaleDisplayValue, setScaleDisplayValue] = useState<string>(
     pdfParameters.scale.toString()
   );
 
-  // Local state for the fuse score threshold input
+  const [htmlScaleDisplayValue, setHtmlScaleDisplayValue] = useState<string>(
+    htmlParameters.scale.toString()
+  );
+
   const [thresholdDisplayValue, setThresholdDisplayValue] = useState<string>(
     fuseScoreThreshold.toString()
   );
 
-  // Sync scaleDisplayValue with global state if pdfParameters.scale changes externally
   useEffect(() => {
     const storeValStr = pdfParameters.scale.toString();
 
-    // Case 1: User is typing an intermediate float string like "1."
-    // If scaleDisplayValue is "X." and pdfParameters.scale is numerically X, let "X." persist.
     if (scaleDisplayValue.endsWith('.') && Number(scaleDisplayValue.slice(0, -1)) === pdfParameters.scale) {
       return;
     }
 
-    // Case 2: User cleared the input, which defaults pdfParameters.scale to 1.
-    // If scaleDisplayValue is empty and the store reflects the default (1 for scale), set display to "1".
     if (scaleDisplayValue.trim() === "" && pdfParameters.scale === 1) {
       setScaleDisplayValue("1");
       return;
     }
 
-    // Case 3: General synchronization or correcting invalid local state.
-    // If scaleDisplayValue is not identical to the string representation of the store value,
-    // update scaleDisplayValue. This handles external changes to pdfParameters.scale (e.g., reset)
-    // and also resets invalid local text (like "abc") to the store's current valid value.
     if (scaleDisplayValue !== storeValStr) {
       setScaleDisplayValue(storeValStr);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pdfParameters.scale]); 
+  }, [pdfParameters.scale, scaleDisplayValue]);
 
-  // Sync thresholdDisplayValue with global state if fuseScoreThreshold changes externally
+  useEffect(() => {
+    const storeValStr = htmlParameters.scale.toString();
+    if (htmlScaleDisplayValue.endsWith('.') && Number(htmlScaleDisplayValue.slice(0, -1)) === htmlParameters.scale) {
+      return;
+    }
+    if (htmlScaleDisplayValue.trim() === "" && htmlParameters.scale === 1) {
+      setHtmlScaleDisplayValue("1");
+      return;
+    }
+    if (htmlScaleDisplayValue !== storeValStr) {
+      setHtmlScaleDisplayValue(storeValStr);
+    }
+  }, [htmlParameters.scale, htmlScaleDisplayValue]);
+
   useEffect(() => {
     const storeValStr = fuseScoreThreshold.toString();
-    // Avoid disrupting user typing intermediate values like "0."
     if (thresholdDisplayValue.endsWith('.') && Number(thresholdDisplayValue.slice(0, -1)) === fuseScoreThreshold) {
       return;
     }
-    if (thresholdDisplayValue.trim() === "" && fuseScoreThreshold === 0.4) { 
-      setThresholdDisplayValue(fuseScoreThreshold.toString()); // Update to store default if empty
+    if (thresholdDisplayValue.trim() === "" && fuseScoreThreshold === 0.4) {
+      setThresholdDisplayValue(fuseScoreThreshold.toString());
       return;
     }
     if (thresholdDisplayValue !== storeValStr) {
       setThresholdDisplayValue(storeValStr);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fuseScoreThreshold]);
+  }, [fuseScoreThreshold, thresholdDisplayValue]);
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -111,51 +116,44 @@ const ControlPanel: React.FC = () => {
         if (file.type === 'text/plain') {
           isValidType = true;
           const fileReader = new FileReader();
-          fileReader.readAsText(file);
           fileReader.onload = () => {
-            if (isValidType) {
-              setUploadedFileAndSyncActive(file, fileReader.result as string);
-            }
+            const textContent = fileReader.result as string;
+            setUploadedFileAndSyncActive(file, textContent);
           };
           fileReader.onerror = () => {
-            alert('Error reading file.');
-            if (fileInputRef.current) {
-              fileInputRef.current.value = '';
-            }
+            console.error('Error reading text file.');
+            alert('Error reading text file.');
+            setUploadedFileAndSyncActive(null, null);
           };
+          fileReader.readAsText(file);
         } else {
-          alert('Invalid file type. Expected TXT.');
+          alert('Invalid file type. Expected Text (.txt).');
         }
       } else if (currentSelectedType === 'html') {
         if (file.type === 'text/html') {
           isValidType = true;
           const fileReader = new FileReader();
-          fileReader.readAsText(file);
           fileReader.onload = () => {
-            if (isValidType) {
-              setUploadedFileAndSyncActive(file, fileReader.result as string);
-            }
+            const htmlContent = fileReader.result as string;
+            setUploadedFileAndSyncActive(file, htmlContent);
           };
           fileReader.onerror = () => {
-            alert('Error reading file.');
-            if (fileInputRef.current) {
-              fileInputRef.current.value = '';
-            }
+            console.error('Error reading HTML file.');
+            alert('Error reading HTML file.');
+            setUploadedFileAndSyncActive(null, null);
           };
+          fileReader.readAsText(file);
         } else {
-          alert('Invalid file type. Expected HTML.');
+          alert('Invalid file type. Expected HTML (.html).');
         }
       }
+
       if (!isValidType && fileInputRef.current) {
         fileInputRef.current.value = '';
       }
     } else {
-      // If no file is selected, clear the active file for the current type
       const currentType = useFileStore.getState().fileType;
       if (currentType) {
-        // Call setUploadedFileAndSyncActive with nulls. 
-        // The store logic will determine actualFileType as null and won't update specific instances, 
-        // but setFileType(null) within resetAllParameters is the primary mechanism for clearing active views.
         setUploadedFileAndSyncActive(null, null);
       }
     }
@@ -165,27 +163,45 @@ const ControlPanel: React.FC = () => {
     key: keyof PdfParameters,
     value: string
   ) => {
-    // If the user clears the input (empty string after trim)
-    if (value.trim() === "") {
-      if (key === 'scale') {
-        updatePdfParameter('scale', 1); // Default scale to 1 if cleared
+    const numericKeys: Array<keyof PdfParameters> = [
+      'pageNumber',
+      'x',
+      'y',
+      'boxWidth',
+      'boxHeight',
+      'pageWidth',
+      'pageHeight',
+    ];
+
+    if (numericKeys.includes(key)) {
+      const numValue = parseInt(value, 10);
+      if (!isNaN(numValue)) {
+        updatePdfParameter(key, numValue as PdfParameters[keyof PdfParameters]);
       } else {
-        updatePdfParameter(key, 0); // Default other params to 0 if cleared
+        updatePdfParameter(key, 0 as number);
       }
-      return;
     }
+  };
 
-    // Attempt to convert the input value to a number.
-    const numValue = Number(value);
+  const handleHtmlParameterChange = (
+    key: keyof HtmlParameters,
+    value: string
+  ) => {
+    const numericKeys: Array<keyof HtmlParameters> = [
+      'pageNumber',
+      'x',
+      'y',
+      'boxWidth',
+      'boxHeight',
+    ];
 
-    // If the conversion results in NaN (e.g., invalid characters like "abc" or just "-"),
-    // update the store with its current value. This makes the input field revert to the
-    // last valid numeric state if an invalid character is typed.
-    if (isNaN(numValue)) {
-      updatePdfParameter(key, pdfParameters[key]); 
-    } else {
-      // If it's a valid number (this handles "05" -> 5, "1." -> 1 etc.), update the store.
-      updatePdfParameter(key, numValue);
+    if (numericKeys.includes(key)) {
+      const numValue = parseInt(value, 10);
+      if (!isNaN(numValue)) {
+        updateHtmlParameter(key, numValue as HtmlParameters[keyof HtmlParameters]);
+      } else if (value === '') {
+        updateHtmlParameter(key, 0 as number);
+      }
     }
   };
 
@@ -195,18 +211,27 @@ const ControlPanel: React.FC = () => {
 
     const trimmedValue = newValue.trim();
     if (trimmedValue === "") {
-      // If user clears input, set scale in store to 1 (default for scale)
-      // The display will be empty until blur or next valid input that sets store
       updatePdfParameter('scale', 1);
     } else if (!trimmedValue.endsWith('.')) {
-      // If not ending with a decimal, try to parse and update store
       const num = Number(trimmedValue);
       if (!isNaN(num)) {
         updatePdfParameter('scale', num);
       }
-      // If NaN (e.g. "abc"), store is not updated. Display shows "abc". Blur will fix.
     }
-    // If ends with '.', store is not updated with a truncated number. Display shows "1.". Blur will fix.
+  };
+
+  const handleHtmlScaleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setHtmlScaleDisplayValue(val);
+
+    if (val.trim() === '' || val.endsWith('.')) {
+    } else {
+      const newScale = parseFloat(val);
+      if (!isNaN(newScale) && newScale > 0) {
+        updateHtmlParameter('scale', newScale);
+      } else if (val.trim() !== "" && isNaN(newScale)) {
+      }
+    }
   };
 
   const handleScaleInputBlur = () => {
@@ -215,30 +240,37 @@ const ControlPanel: React.FC = () => {
       updatePdfParameter('scale', 1);
       setScaleDisplayValue("1");
     } else {
-      const num = Number(trimmedValue); // "1." becomes 1, "1.2" becomes 1.2
+      const num = Number(trimmedValue);
       if (!isNaN(num)) {
         updatePdfParameter('scale', num);
-        setScaleDisplayValue(num.toString()); // Sync display with what's in store
+        setScaleDisplayValue(num.toString());
       } else {
-        // Invalid content like "abc", revert to default scale in store and display
         updatePdfParameter('scale', 1);
         setScaleDisplayValue("1");
       }
     }
   };
 
+  const handleHtmlScaleInputBlur = () => {
+    let newScale = parseFloat(htmlScaleDisplayValue);
+    if (isNaN(newScale) || newScale <= 0) {
+      newScale = 1;
+      setHtmlScaleDisplayValue(newScale.toString());
+    }
+    updateHtmlParameter('scale', newScale);
+    setHtmlScaleDisplayValue(useFileStore.getState().htmlParameters.scale.toString());
+  };
+
   const handleThresholdInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { value } = e.target;
 
-    // Allow empty, numbers, and a single decimal point
     if (value === "" || /^[0-9]*\.?([0-9]+)?$/.test(value)) {
       setThresholdDisplayValue(value);
 
-      // If it's a valid complete float (not ending in '.'), update the store
       if (!value.endsWith('.') && value.trim() !== "") {
         const numVal = parseFloat(value);
         if (!isNaN(numVal)) {
-          setFuseScoreThreshold(numVal); // This will clamp 0.0-1.0
+          setFuseScoreThreshold(numVal);
         }
       }
     }
@@ -248,11 +280,10 @@ const ControlPanel: React.FC = () => {
     const numValue = parseFloat(thresholdDisplayValue);
 
     if (isNaN(numValue)) {
-      setFuseScoreThreshold(0.4); // Default if invalid
+      setFuseScoreThreshold(0.4);
     } else {
-      setFuseScoreThreshold(numValue); // Let store clamp it
+      setFuseScoreThreshold(numValue);
     }
-    // Ensure display value reflects the potentially clamped value from the store
     setThresholdDisplayValue(useFileStore.getState().fuseScoreThreshold.toString());
   };
 
@@ -315,7 +346,8 @@ const ControlPanel: React.FC = () => {
         </div>
       )}
 
-      {(fileType === 'text' || fileType === 'html') && (
+      {/* Text Matching Section - Show only for Text files */}
+      {fileType === 'text' && (
         <div className="space-y-4 pt-4 border-t">
           <h3 className="text-lg font-medium">Text Matching</h3>
           <div className="space-y-1">
@@ -336,7 +368,7 @@ const ControlPanel: React.FC = () => {
             <Label htmlFor="fuseScoreThreshold">Match Score Threshold (0.0 - 1.0)</Label>
             <Input
               id="fuseScoreThreshold"
-              type="text" 
+              type="text"
               value={thresholdDisplayValue}
               onChange={handleThresholdInputChange}
               onBlur={handleThresholdInputBlur}
@@ -372,13 +404,13 @@ const ControlPanel: React.FC = () => {
           {(Object.keys(pdfParameters) as Array<keyof PdfParameters>).map(
             (key) => (
               <div key={key} className="space-y-1">
-                <Label htmlFor={key} className="capitalize">
-                  {key.replace(/([A-Z])/g, ' $1')} {/* Add space before caps */}
+                <Label htmlFor={`pdf-${key}`} className="capitalize">
+                  {key.replace(/([A-Z])/g, ' $1')}
                 </Label>
                 {key === 'scale' ? (
                   <Input
-                    id="scale"
-                    type="text" // Use text to allow intermediate states like "1."
+                    id={`pdf-${key}`}
+                    type="text"
                     value={scaleDisplayValue}
                     onChange={handleScaleInputChange}
                     onBlur={handleScaleInputBlur}
@@ -386,7 +418,7 @@ const ControlPanel: React.FC = () => {
                   />
                 ) : (
                   <Input
-                    id={key}
+                    id={`pdf-${key}`}
                     type="text"
                     value={pdfParameters[key]?.toString() || ''}
                     onChange={(e) => handleParameterChange(key, e.target.value)}
@@ -398,6 +430,44 @@ const ControlPanel: React.FC = () => {
           )}
         </div>
       )}
+
+      {fileType === 'html' && (
+        <div className="space-y-4 pt-4 border-t">
+          <h3 className="text-lg font-medium">HTML Parameters</h3>
+          {(Object.keys(htmlParameters) as Array<keyof HtmlParameters>).map(
+            (key) => {
+              if (key === 'pageWidth' || key === 'pageHeight') return null;
+
+              return (
+                <div key={key} className="space-y-1">
+                  <Label htmlFor={`html-${key}`} className="capitalize">
+                    {key.replace(/([A-Z])/g, ' $1')}
+                  </Label>
+                  {key === 'scale' ? (
+                    <Input
+                      id={`html-${key}`}
+                      type="text"
+                      value={htmlScaleDisplayValue}
+                      onChange={handleHtmlScaleInputChange}
+                      onBlur={handleHtmlScaleInputBlur}
+                      placeholder="Enter scale (e.g., 1.0)"
+                    />
+                  ) : (
+                    <Input
+                      id={`html-${key}`}
+                      type="text"
+                      value={htmlParameters[key]?.toString() || ''}
+                      onChange={(e) => handleHtmlParameterChange(key, e.target.value)}
+                      placeholder={`Enter ${key.toLowerCase()}`}
+                    />
+                  )}
+                </div>
+              );
+            }
+          )}
+        </div>
+      )}
+
       <Button onClick={handleReset} className="w-full mt-4">
         Reset All
       </Button>
