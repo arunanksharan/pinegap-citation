@@ -6,6 +6,7 @@ import { useFileStore } from '../../store/useFileStore';
 import Fuse from 'fuse.js';
 import BoundingBox from './BoundingBox';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import HtmlViewer from './HtmlViewer';
 
 // Configure PDF.js worker to use the locally served file from the public directory
 pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
@@ -261,9 +262,9 @@ const FileViewer: React.FC = () => {
         )}
       </div>
     );
-  }
-
-  if ((fileType === 'text' || fileType === 'html') && activeFileContent) {
+  } else if (fileType === 'html' && activeFileContent) {
+    return <HtmlViewer />;
+  } else if (fileType === 'text' && activeFileContent) {
     return (
       <ScrollArea className="w-full h-[calc(100vh-200px)] p-1 border rounded-md shadow-inner bg-gray-50">
         <div className="whitespace-pre-wrap font-mono text-sm p-4">

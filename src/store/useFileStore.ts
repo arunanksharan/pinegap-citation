@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type FileType = 'pdf' | 'html' | 'text';
+export type FileType = 'pdf' | 'text' | 'html';
 
 export interface PdfParameters {
   pageNumber: number;
@@ -13,7 +13,23 @@ export interface PdfParameters {
   boxHeight: number; // User-defined height for bounding box (absolute pixels)
 }
 
-// States for each file type instance
+export interface HtmlParameters {
+  pageNumber: number;
+  scale: number;
+  pageWidth: number; // Actual width of the rendered HTML viewport in pixels
+  pageHeight: number; // Actual height of the rendered HTML viewport in pixels
+  x: number; // User-defined X for bounding box (absolute pixels)
+  y: number; // User-defined Y for bounding box (absolute pixels)
+  boxWidth: number; // User-defined width for bounding box (absolute pixels)
+  boxHeight: number; // User-defined height for bounding box (absolute pixels)
+}
+
+export interface TextParameters {
+  searchTerm: string;
+  matchCase: boolean;
+  fontSize: number;
+}
+
 interface PdfFileState {
   file: File | null;
   numPages: number | null;
@@ -22,6 +38,12 @@ interface PdfFileState {
 interface TextFileState {
   file: File | null;
   content: string | null;
+}
+
+interface HtmlFileState {
+  file: File | null;
+  content: string | null;
+  numPages: number | null;
 }
 
 // Main store structure
@@ -33,9 +55,12 @@ interface FileState {
 
   pdfInstance: PdfFileState;
   textInstance: TextFileState;
-  // htmlInstance will be added later
+  htmlInstance: HtmlFileState;
 
   pdfParameters: PdfParameters; // Remains for PDF specific UI controls
+  htmlParameters: HtmlParameters; // Added for HTML specific UI controls
+  textParameters: TextParameters; // Added for Text specific UI controls
+
   searchText: string;
   searchQueryForFuse: string; // Actual query to be used by Fuse.js, set on button click
   thresholdForFuse: number;   // Actual threshold to be used by Fuse.js, set on button click
@@ -51,9 +76,14 @@ interface FileActions {
   // Action to set a newly uploaded file and its content, and update active states if type matches
   setUploadedFileAndSyncActive: (uploadedFile: File | null, uploadedContent: string | null) => void;
   setPdfNumPagesForInstance: (pages: number | null) => void; // Updates pdfInstance.numPages
+  setHtmlNumPagesForInstance: (pages: number | null) => void; // Updates htmlInstance.numPages
 
   updatePdfParameter: <K extends keyof PdfParameters>(key: K, value: PdfParameters[K]) => void;
   setPdfParameters: (params: Partial<PdfParameters>) => void;
+  updateHtmlParameter: <K extends keyof HtmlParameters>(key: K, value: HtmlParameters[K]) => void;
+  setHtmlParameters: (params: Partial<HtmlParameters>) => void;
+  updateTextParameter: <K extends keyof TextParameters>(key: K, value: TextParameters[K]) => void;
+  setTextParameters: (params: Partial<TextParameters>) => void;
   setSearchText: (text: string) => void;
   triggerSearch: () => void; // New action to trigger search
   setFuseScoreThreshold: (threshold: number | string) => void; // Renamed, accepts number or string for parsing
@@ -76,6 +106,23 @@ const initialPdfParameters: PdfParameters = {
   boxHeight: 100, // Default example value
 };
 
+const initialHtmlParameters: HtmlParameters = {
+  pageNumber: 1,
+  scale: 1,
+  pageWidth: 0, // Will be set by the renderer component
+  pageHeight: 0, // Will be set by the renderer component
+  x: 50,
+  y: 50,
+  boxWidth: 200,
+  boxHeight: 100,
+};
+
+const initialTextParameters: TextParameters = {
+  searchTerm: '',
+  matchCase: false,
+  fontSize: 16,
+};
+
 const initialFileStateOnly: FileState = {
   fileType: null,
   activeFile: null,
@@ -83,7 +130,10 @@ const initialFileStateOnly: FileState = {
   activeNumPages: null,
   pdfInstance: { file: null, numPages: null },
   textInstance: { file: null, content: null },
+  htmlInstance: { file: null, content: null, numPages: null },
   pdfParameters: initialPdfParameters,
+  htmlParameters: initialHtmlParameters,
+  textParameters: initialTextParameters,
   searchText: '',
   searchQueryForFuse: '',
   thresholdForFuse: 0.4, // Default to 0.4, will be updated by fuseScoreThreshold
@@ -114,8 +164,12 @@ export const useFileStore = create<FileState & FileActions>((set, get) => ({
         activeNumPages: null, // No pages for text
       });
     } else if (type === 'html') {
-      // Placeholder for HTML
-      set({ fileType: 'html', activeFile: null, activeFileContent: null, activeNumPages: null });
+      set({
+        fileType: 'html',
+        activeFile: state.htmlInstance.file,
+        activeFileContent: state.htmlInstance.content,
+        activeNumPages: state.htmlInstance.numPages,
+      });
     } else {
       set({ fileType: null, activeFile: null, activeFileContent: null, activeNumPages: null });
     }
@@ -141,9 +195,8 @@ export const useFileStore = create<FileState & FileActions>((set, get) => ({
           activeNumPages: state.fileType === 'text' ? null : state.activeNumPages, // Ensure PDF pages are cleared if text was active
         }));
       } else if (currentFileType === 'html') {
-        // Placeholder for HTML clearing logic - assuming similar pattern
         set(state => ({
-          // htmlInstance: { file: null, content: null }, // When htmlInstance is added
+          htmlInstance: { file: null, content: null, numPages: null },
           activeFile: state.fileType === 'html' ? null : state.activeFile,
           activeFileContent: state.fileType === 'html' ? null : state.activeFileContent,
           activeNumPages: state.fileType === 'html' ? null : state.activeNumPages,
@@ -176,8 +229,16 @@ export const useFileStore = create<FileState & FileActions>((set, get) => ({
         // Clear numPages if Text is uploaded and Text is active view
         activeNumPages: currentFileType === 'text' ? null : state.activeNumPages,
       }));
-    } 
-    // Add HTML handling later
+    } else if (actualFileType === 'html') {
+      set(state => ({ 
+        htmlInstance: { file: uploadedFile, content: uploadedContent, numPages: null },
+        // If current view is already HTML, update active file/content immediately
+        activeFile: currentFileType === 'html' ? uploadedFile : state.activeFile,
+        activeFileContent: currentFileType === 'html' ? uploadedContent : state.activeFileContent,
+        // Clear numPages if HTML is uploaded and HTML is active view
+        activeNumPages: currentFileType === 'html' ? null : state.activeNumPages,
+      }));
+    }
   },
   
   setPdfNumPagesForInstance: (pages) => {
@@ -188,10 +249,26 @@ export const useFileStore = create<FileState & FileActions>((set, get) => ({
     }));
   },
 
+  setHtmlNumPagesForInstance: (pages) => {
+    set(state => ({
+      htmlInstance: { ...state.htmlInstance, numPages: pages },
+      // If the currently active file is this HTML instance, update activeNumPages too
+      activeNumPages: state.activeFile === state.htmlInstance.file ? pages : state.activeNumPages,
+    }));
+  },
+
   updatePdfParameter: (key, value) =>
     set((state) => ({ pdfParameters: { ...state.pdfParameters, [key]: value } })),
   setPdfParameters: (params) => 
     set((state) => ({ pdfParameters: { ...state.pdfParameters, ...params }})),
+  updateHtmlParameter: (key, value) =>
+    set((state) => ({ htmlParameters: { ...state.htmlParameters, [key]: value } })),
+  setHtmlParameters: (params) => 
+    set((state) => ({ htmlParameters: { ...state.htmlParameters, ...params }})),
+  updateTextParameter: (key, value) =>
+    set((state) => ({ textParameters: { ...state.textParameters, [key]: value } })),
+  setTextParameters: (params) => 
+    set((state) => ({ textParameters: { ...state.textParameters, ...params }})),
   setSearchText: (text) => set({ searchText: text }),
   triggerSearch: () => {
     set((state) => {
