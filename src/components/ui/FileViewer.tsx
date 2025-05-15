@@ -1,14 +1,12 @@
-import React, { useMemo, useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Document, Page, pdfjs, PageProps } from 'react-pdf';
 import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
 import 'react-pdf/dist/esm/Page/TextLayer.css';
 import { useFileStore } from '../../store/useFileStore';
-import Fuse from 'fuse.js';
 import BoundingBox from './BoundingBox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import HtmlViewer from './HtmlViewer';
 
-// Configure PDF.js worker to use the locally served file from the public directory
 pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
 
 const FileViewer: React.FC = () => {
@@ -19,10 +17,9 @@ const FileViewer: React.FC = () => {
     pdfParameters,
     setPdfNumPagesForInstance,
     searchQueryForFuse,
-    fuseScoreThreshold, // Use this directly for the threshold
     highlightColor,
-    isCaseSensitive, // Re-add
-    pdfNumPages, // Added to get the total number of pages for PDF
+    isCaseSensitive,
+    pdfNumPages,
   } = useFileStore();
 
   const [pdfFileUrl, setPdfFileUrl] = useState<string | null>(null);
@@ -40,13 +37,9 @@ const FileViewer: React.FC = () => {
 
   useEffect(() => {
     if (activeFileContent && fileType === 'text') {
-      const currentLines = activeFileContent.split('\n').map((line, index) => ({
-        text: line,
-        lineNumber: index + 1,
-      }));
-      console.log('[FileViewer] Lines for Fuse.js:', currentLines);
-    } else {
-      console.log('[FileViewer] No active text content for lines.');
+      console.log('[FileViewer] Text content is available for exact search.');
+    } else if (fileType === 'text'){
+      console.log('[FileViewer] No active text content for exact search.');
     }
   }, [activeFileContent, fileType]);
 
@@ -85,180 +78,45 @@ const FileViewer: React.FC = () => {
     }
   };
 
-  const lines = useMemo(() => {
-    if (activeFileContent && fileType === 'text') {
-      return activeFileContent
-        .split('\n')
-        .map((text, index) => ({ text, lineNumber: index + 1 }));
-    } else {
-      return [];
-    }
-  }, [activeFileContent, fileType]);
-
-  const fuseInstance = useMemo(() => {
-    // Ensure Fuse only runs for text files and if lines are available
-    if (fileType !== 'text' || !lines || lines.length === 0) return null; 
-    console.log(
-      `[FileViewer] Fuse instance recomputing for TEXT. Threshold: ${fuseScoreThreshold}, Lines count: ${lines.length}, CaseSensitive: ${isCaseSensitive}`
-    );
-    // DIAGNOSTIC: Options adjusted for better substring matching
-    return new Fuse(lines, {
-      keys: ['text'],
-      includeScore: true, // Keep for debugging
-      includeMatches: true, // Keep for debugging
-      threshold: fuseScoreThreshold, // This is the threshold from the UI
-      ignoreLocation: true, // Crucial for substring matching regardless of position
-      ignoreFieldNorm: true, // Disable field length penalty for long text matches
-      isCaseSensitive: isCaseSensitive, // Use value from store
-    });
-  }, [lines, fuseScoreThreshold, isCaseSensitive, fileType]); // Added fileType dependency
-
-  const searchResults = useMemo(() => {
-    console.log(
-      `[FileViewer] SearchResults recomputing. Query: '${searchQueryForFuse}', Fuse Threshold: ${fuseScoreThreshold}`
-    );
-    if (!searchQueryForFuse || !fuseInstance) {
-      console.log(
-        '[FileViewer] No search query or fuse instance, returning empty results.'
-      );
-      return [];
+  const renderFullTextWithExactHighlights = (
+    fullText: string,
+    searchTerm: string,
+    caseSensitive: boolean,
+    color: string
+  ): React.ReactNode[] => {
+    if (!searchTerm || searchTerm.trim() === '') {
+      return [fullText]; 
     }
 
-    // Log the query and a sample line from the source data for comparison
-    console.log(
-      '[FileViewer] JSON.stringified searchQueryForFuse:',
-      JSON.stringify(searchQueryForFuse)
-    );
-    // IMPORTANT: Adjust the index lines[X] to a line you know contains the search query
-    // For example, if your search query is expected in the 2nd line of the file (index 1):
-    if (lines && lines.length > 1 && lines[1]) {
-      // Check if line exists
-      console.log(
-        '[FileViewer] JSON.stringified lines[1].text:',
-        JSON.stringify(lines[1].text)
-      );
-    }
-    // You might need to log a different line index based on your pinegap.txt content
-
-    const fuseResults = fuseInstance.search(searchQueryForFuse);
-    console.log('[FileViewer] Fuse raw results:', fuseResults);
-    // Manual threshold filtering: keep only matches with score <= threshold
-    const filteredResults = fuseResults.filter(
-      (r) => typeof r.score === 'number' && r.score <= fuseScoreThreshold
-    );
-    console.log(
-      `[FileViewer] Results after manual threshold filter (score <= ${fuseScoreThreshold}): ${filteredResults.length}`
-    );
-    return filteredResults
-      .map((fuseResult) => {
-        // Assuming matches exist and matches[0] is the relevant one for 'text' key
-        const matchDetails = fuseResult.matches?.[0];
-        return {
-          lineNumber: fuseResult.item.lineNumber,
-          text: fuseResult.item.text, // Original line text
-          score: fuseResult.score, // Score of the match
-          indices: matchDetails?.indices || [], // Array of [start, end] character indices
-        };
-      })
-      .filter((result) => result.indices.length > 0); // Only keep results that have match segments
-  }, [searchQueryForFuse, fuseInstance, fuseScoreThreshold, lines]);
-
-  const renderLineWithHighlights = (lineText: string, lineNumber: number) => {
-    // ---- START: Exact search logic for fileType 'text' ----
-    if (fileType === 'text') {
-      if (!searchQueryForFuse || searchQueryForFuse.trim() === '') {
-        return <div key={lineNumber}>{lineText}</div>;
-      }
-
-      const parts: React.ReactNode[] = [];
-      let lastIndex = 0;
-      const searchTerm = searchQueryForFuse;
-      const textToSearch = lineText;
-
-      const effectiveSearchTerm = isCaseSensitive ? searchTerm : searchTerm.toLowerCase();
-      const effectiveTextToSearch = isCaseSensitive ? textToSearch : textToSearch.toLowerCase();
-
-      let currentIndex = effectiveTextToSearch.indexOf(effectiveSearchTerm, lastIndex);
-
-      while (currentIndex !== -1) {
-        // Add the part before the match
-        if (currentIndex > lastIndex) {
-          parts.push(textToSearch.substring(lastIndex, currentIndex));
-        }
-        // Add the highlighted match (using original casing from textToSearch)
-        parts.push(
-          <mark
-            key={`match-${lineNumber}-${currentIndex}`}
-            style={{ backgroundColor: highlightColor, color: 'black' }}
-          >
-            {textToSearch.substring(currentIndex, currentIndex + searchTerm.length)}
-          </mark>
-        );
-        lastIndex = currentIndex + searchTerm.length;
-        currentIndex = effectiveTextToSearch.indexOf(effectiveSearchTerm, lastIndex);
-      }
-
-      // Add the remaining part of the line
-      if (lastIndex < textToSearch.length) {
-        parts.push(textToSearch.substring(lastIndex));
-      }
-
-      return <div key={lineNumber}>{parts.length > 0 ? parts : lineText}</div>;
-    }
-    // ---- END: Exact search logic for fileType 'text' ----
-
-    // ---- START: Fallback to existing Fuse.js logic for other types (e.g., HTML if it used this) ----
-    // This part remains from the previous implementation for non-text types
-    if (!searchQueryForFuse || !fuseInstance) {
-      return <div key={lineNumber}>{lineText}</div>;
-    }
-
-    const matchesOnThisLine = searchResults.filter(
-      (match) => match.lineNumber === lineNumber
-    );
-    if (!matchesOnThisLine.length || searchQueryForFuse.trim() === '') {
-      return <div key={lineNumber}>{lineText}</div>;
-    }
-
+    const parts: React.ReactNode[] = [];
     let lastIndex = 0;
-    const parts = [];
-    const allIndices = matchesOnThisLine
-      .flatMap((match) => match.indices)
-      .sort((a, b) => a[0] - b[0]);
+    const textToSearch = caseSensitive ? fullText : fullText.toLowerCase();
+    const termToSearch = caseSensitive ? searchTerm : searchTerm.toLowerCase();
+    const searchTermLength = searchTerm.length; 
 
-    const mergedIndices: Array<[number, number]> = [];
-    if (allIndices.length > 0) {
-      mergedIndices.push([...allIndices[0]] as [number, number]);
-      for (let i = 1; i < allIndices.length; i++) {
-        const current = allIndices[i];
-        const lastMerged = mergedIndices[mergedIndices.length - 1];
-        if (current[0] <= lastMerged[1] + 1) {
-          lastMerged[1] = Math.max(lastMerged[1], current[1]);
-        } else {
-          mergedIndices.push([...current] as [number, number]);
-        }
-      }
-    }
+    let currentIndex = textToSearch.indexOf(termToSearch, lastIndex);
 
-    mergedIndices.forEach(([start, end], i) => {
-      if (start > lastIndex) {
-        parts.push(lineText.substring(lastIndex, start));
+    while (currentIndex !== -1) {
+      if (currentIndex > lastIndex) {
+        parts.push(fullText.substring(lastIndex, currentIndex));
       }
       parts.push(
         <mark
-          key={`match-${lineNumber}-${i}`}
-          style={{ backgroundColor: highlightColor, color: 'black' }}
+          key={`match-${currentIndex}`}
+          style={{ backgroundColor: color, color: 'black' }} 
         >
-          {lineText.substring(start, end + 1)}
+          {fullText.substring(currentIndex, currentIndex + searchTermLength)}
         </mark>
       );
-      lastIndex = end + 1;
-    });
-
-    if (lastIndex < lineText.length) {
-      parts.push(lineText.substring(lastIndex));
+      lastIndex = currentIndex + searchTermLength;
+      currentIndex = textToSearch.indexOf(termToSearch, lastIndex);
     }
-    return <div key={lineNumber}>{parts.length > 0 ? parts : lineText}</div>;
+
+    if (lastIndex < fullText.length) {
+      parts.push(fullText.substring(lastIndex));
+    }
+    
+    return parts.length > 0 ? parts : [fullText];
   };
 
   if (fileType === 'pdf') {
@@ -276,7 +134,6 @@ const FileViewer: React.FC = () => {
             }
             className="flex flex-col items-center"
           >
-            {/* Render pages only if pdfNumPages is available and positive */}
             {pdfNumPages &&
               pdfNumPages > 0 &&
               Array.from(new Array(pdfNumPages), (el, index) => {
@@ -284,7 +141,7 @@ const FileViewer: React.FC = () => {
                 return (
                   <div
                     key={`page_wrapper_${currentPageNumber}`}
-                    style={{ position: 'relative', marginBottom: '10px' }} // Added margin for page separation
+                    style={{ position: 'relative', marginBottom: '10px' }} 
                     className="pdf-page-wrapper"
                   >
                     <Page
@@ -292,17 +149,14 @@ const FileViewer: React.FC = () => {
                       pageNumber={currentPageNumber}
                       scale={pdfParameters.scale}
                       onLoadSuccess={(pageProxy) => {
-                        // Only call the original onPageLoadSuccess if this is the page
-                        // designated for the bounding box, to set its dimensions correctly.
                         if (currentPageNumber === pdfParameters.pageNumber) {
                           onPageLoadSuccess(pageProxy);
                         }
                       }}
-                      renderTextLayer={true} // Enable text layer for selection
-                      renderAnnotationLayer={true} // Enable annotation layer
+                      renderTextLayer={true} 
+                      renderAnnotationLayer={true} 
                       // customTextRenderer removed to use default react-pdf text layer rendering
                     />
-                    {/* Render BoundingBox only on the specified page */}
                     {currentPageNumber === pdfParameters.pageNumber &&
                       pdfParameters.pageWidth > 0 &&
                       pdfParameters.pageHeight > 0 &&
@@ -320,8 +174,8 @@ const FileViewer: React.FC = () => {
                               pdfParameters.pageHeight) *
                             100
                           }
-                          pageWidth={pdfParameters.pageWidth} // These are dimensions of the target page
-                          pageHeight={pdfParameters.pageHeight} // due to the conditional onLoadSuccess call
+                          pageWidth={pdfParameters.pageWidth} 
+                          pageHeight={pdfParameters.pageHeight} 
                           color={highlightColor}
                         />
                       )}
@@ -343,12 +197,16 @@ const FileViewer: React.FC = () => {
   } else if (fileType === 'html' && activeFileContent) {
     return <HtmlViewer />;
   } else if (fileType === 'text' && activeFileContent) {
+    const highlightedContent = renderFullTextWithExactHighlights(
+      activeFileContent,
+      searchQueryForFuse, 
+      isCaseSensitive,
+      highlightColor
+    );
     return (
       <ScrollArea className="w-full h-[calc(100vh-200px)] p-1 border rounded-md shadow-inner bg-gray-50">
         <div className="whitespace-pre-wrap font-mono text-sm p-4">
-          {lines.map((line) =>
-            renderLineWithHighlights(line.text, line.lineNumber)
-          )}
+          {highlightedContent}
         </div>
       </ScrollArea>
     );
