@@ -22,6 +22,7 @@ const FileViewer: React.FC = () => {
     fuseScoreThreshold, // Use this directly for the threshold
     highlightColor,
     isCaseSensitive, // Re-add
+    pdfNumPages, // Added to get the total number of pages for PDF
   } = useFileStore();
 
   const [pdfFileUrl, setPdfFileUrl] = useState<string | null>(null);
@@ -51,12 +52,19 @@ const FileViewer: React.FC = () => {
 
   function onDocumentLoadSuccess({ numPages }: { numPages: number }) {
     setPdfNumPagesForInstance(numPages);
-    if (pdfParameters.pageNumber > numPages) {
+    const currentPdfPageNumber =
+      useFileStore.getState().pdfParameters.pageNumber;
+    if (currentPdfPageNumber > numPages || currentPdfPageNumber === 0) {
       useFileStore
         .getState()
         .updatePdfParameter(
           'pageNumber',
-          Math.min(pdfParameters.pageNumber, numPages) || 1
+          numPages > 0
+            ? Math.min(
+                currentPdfPageNumber > 0 ? currentPdfPageNumber : 1,
+                numPages
+              )
+            : 1
         );
     }
   }
@@ -218,38 +226,58 @@ const FileViewer: React.FC = () => {
             }
             className="flex flex-col items-center"
           >
-            <div style={{ position: 'relative' }}>
-              <Page
-                pageNumber={pdfParameters.pageNumber}
-                scale={pdfParameters.scale}
-                onLoadSuccess={onPageLoadSuccess}
-                renderTextLayer={true}
-                renderAnnotationLayer={true}
-                customTextRenderer={({ str }) => {
-                  return str;
-                }}
-              />
-              {fileType === 'pdf' &&
-                pdfFileUrl &&
-                pdfParameters.pageWidth > 0 &&
-                pdfParameters.pageHeight > 0 &&
-                pdfParameters.boxWidth > 0 &&
-                pdfParameters.boxHeight > 0 && (
-                  <BoundingBox
-                    x={(pdfParameters.x / pdfParameters.pageWidth) * 100}
-                    y={(pdfParameters.y / pdfParameters.pageHeight) * 100}
-                    width={
-                      (pdfParameters.boxWidth / pdfParameters.pageWidth) * 100
-                    }
-                    height={
-                      (pdfParameters.boxHeight / pdfParameters.pageHeight) * 100
-                    }
-                    pageWidth={pdfParameters.pageWidth}
-                    pageHeight={pdfParameters.pageHeight}
-                    color={highlightColor}
-                  />
-                )}
-            </div>
+            {/* Render pages only if pdfNumPages is available and positive */}
+            {pdfNumPages &&
+              pdfNumPages > 0 &&
+              Array.from(new Array(pdfNumPages), (el, index) => {
+                const currentPageNumber = index + 1;
+                return (
+                  <div
+                    key={`page_wrapper_${currentPageNumber}`}
+                    style={{ position: 'relative', marginBottom: '10px' }} // Added margin for page separation
+                    className="pdf-page-wrapper"
+                  >
+                    <Page
+                      key={`page_${currentPageNumber}`}
+                      pageNumber={currentPageNumber}
+                      scale={pdfParameters.scale}
+                      onLoadSuccess={(pageProxy) => {
+                        // Only call the original onPageLoadSuccess if this is the page
+                        // designated for the bounding box, to set its dimensions correctly.
+                        if (currentPageNumber === pdfParameters.pageNumber) {
+                          onPageLoadSuccess(pageProxy);
+                        }
+                      }}
+                      renderTextLayer={false} // Kept false for diagnostics
+                      renderAnnotationLayer={false} // Temporarily set to false for diagnostics
+                      // customTextRenderer removed to use default react-pdf text layer rendering
+                    />
+                    {/* Render BoundingBox only on the specified page */}
+                    {currentPageNumber === pdfParameters.pageNumber &&
+                      pdfParameters.pageWidth > 0 &&
+                      pdfParameters.pageHeight > 0 &&
+                      pdfParameters.boxWidth > 0 &&
+                      pdfParameters.boxHeight > 0 && (
+                        <BoundingBox
+                          x={(pdfParameters.x / pdfParameters.pageWidth) * 100}
+                          y={(pdfParameters.y / pdfParameters.pageHeight) * 100}
+                          width={
+                            (pdfParameters.boxWidth / pdfParameters.pageWidth) *
+                            100
+                          }
+                          height={
+                            (pdfParameters.boxHeight /
+                              pdfParameters.pageHeight) *
+                            100
+                          }
+                          pageWidth={pdfParameters.pageWidth} // These are dimensions of the target page
+                          pageHeight={pdfParameters.pageHeight} // due to the conditional onLoadSuccess call
+                          color={highlightColor}
+                        />
+                      )}
+                  </div>
+                );
+              })}
           </Document>
         ) : (
           <div className="flex justify-center items-center h-full">

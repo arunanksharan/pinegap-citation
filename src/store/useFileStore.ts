@@ -52,6 +52,7 @@ interface FileState {
   activeFile: File | null;         // File object for FileViewer (can be PDF or Text file obj)
   activeFileContent: string | null; // Text content for FileViewer
   activeNumPages: number | null;   // numPages for current active PDF in viewer
+  pdfNumPages: number | null;      // Total number of pages for the loaded PDF document, distinct from activeNumPages for UI elements like sliders
 
   pdfInstance: PdfFileState;
   textInstance: TextFileState;
@@ -128,6 +129,7 @@ const initialFileStateOnly: FileState = {
   activeFile: null,
   activeFileContent: null,
   activeNumPages: null,
+  pdfNumPages: null, // Initialize pdfNumPages
   pdfInstance: { file: null, numPages: null },
   textInstance: { file: null, content: null },
   htmlInstance: { file: null, content: null, numPages: null },
@@ -148,86 +150,86 @@ export const useFileStore = create<FileState & FileActions>((set, get) => ({
   ...initialFileStateOnly,
 
   setFileType: (type) => {
-    const state = get();
-    if (type === 'pdf') {
-      set({
-        fileType: 'pdf',
-        activeFile: state.pdfInstance.file,
-        activeFileContent: null,
-        activeNumPages: state.pdfInstance.numPages,
-      });
-    } else if (type === 'text') {
-      set({
-        fileType: 'text',
-        activeFile: state.textInstance.file, // Text file object can also be in activeFile
-        activeFileContent: state.textInstance.content,
-        activeNumPages: null, // No pages for text
-      });
-    } else if (type === 'html') {
-      set({
-        fileType: 'html',
-        activeFile: state.htmlInstance.file,
-        activeFileContent: state.htmlInstance.content,
-        activeNumPages: state.htmlInstance.numPages,
-      });
-    } else {
-      set({ fileType: null, activeFile: null, activeFileContent: null, activeNumPages: null });
-    }
+    set((state) => {
+      if (state.fileType === type) return {}; // No change if type is already set
+
+      let newActiveFile: File | null = null;
+      let newActiveFileContent: string | null = null;
+      let newActiveNumPages: number | null = null;
+      let newPdfNumPages: number | null = state.pdfNumPages; // Preserve if not changing from PDF
+
+      if (type === 'pdf') {
+        newActiveFile = state.pdfInstance.file;
+        newActiveFileContent = null; // PDFs don't have string content in this model
+        newActiveNumPages = state.pdfInstance.numPages;
+        newPdfNumPages = state.pdfInstance.numPages; // Set when PDF becomes active
+      } else if (type === 'text') {
+        newActiveFile = state.textInstance.file;
+        newActiveFileContent = state.textInstance.content;
+        newActiveNumPages = null; // Text files don't have pages
+        newPdfNumPages = null; // Clear if switching away from PDF
+      } else if (type === 'html') {
+        newActiveFile = state.htmlInstance.file;
+        newActiveFileContent = state.htmlInstance.content;
+        newActiveNumPages = state.htmlInstance.numPages; // HTML might have pages
+        newPdfNumPages = null; // Clear if switching away from PDF
+      } else {
+        // Clearing file type
+        newPdfNumPages = null;
+      }
+
+      return {
+        fileType: type,
+        activeFile: newActiveFile,
+        activeFileContent: newActiveFileContent,
+        activeNumPages: newActiveNumPages,
+        pdfNumPages: newPdfNumPages, // Update pdfNumPages
+      };
+    });
   },
 
   setUploadedFileAndSyncActive: (uploadedFile, uploadedContent) => {
-    const currentFileType = get().fileType;
-
     if (!uploadedFile) {
-      // Handle the case where the file input is cleared or no file is selected
-      if (currentFileType === 'pdf') {
-        set(state => ({
-          pdfInstance: { file: null, numPages: null },
-          activeFile: state.fileType === 'pdf' ? null : state.activeFile,
-          activeNumPages: state.fileType === 'pdf' ? null : state.activeNumPages,
-          activeFileContent: state.fileType === 'pdf' ? null : state.activeFileContent, // Ensure text content is cleared if PDF was active
-        }));
-      } else if (currentFileType === 'text') {
-        set(state => ({
-          textInstance: { file: null, content: null },
-          activeFile: state.fileType === 'text' ? null : state.activeFile,
-          activeFileContent: state.fileType === 'text' ? null : state.activeFileContent,
-          activeNumPages: state.fileType === 'text' ? null : state.activeNumPages, // Ensure PDF pages are cleared if text was active
-        }));
-      } else if (currentFileType === 'html') {
-        set(state => ({
-          htmlInstance: { file: null, content: null, numPages: null },
-          activeFile: state.fileType === 'html' ? null : state.activeFile,
-          activeFileContent: state.fileType === 'html' ? null : state.activeFileContent,
-          activeNumPages: state.fileType === 'html' ? null : state.activeNumPages,
-        }));
-      }
-      return; // Exit early as there's no file to process
+      // If null is passed, it might mean to clear the specific type or all
+      // This function is primarily for new uploads, so handling null might be out of scope
+      // or require more specific logic based on which type is being cleared.
+      // For now, we assume uploadedFile is always provided for an upload operation.
+      return;
     }
 
-    // If uploadedFile is not null, proceed with determining its type
-    const actualFileType = uploadedFile.type === 'application/pdf' ? 'pdf'
-                         : (uploadedFile.type === 'text/plain' || uploadedFile.name.endsWith('.txt')) ? 'text'
-                         : (uploadedFile.type === 'text/html' || uploadedFile.name.endsWith('.html')) ? 'html'
-                         : null;
+    const fileExtension = uploadedFile.name.split('.').pop()?.toLowerCase();
+    let actualFileType: FileType | null = null;
+
+    if (fileExtension === 'pdf') actualFileType = 'pdf';
+    else if (fileExtension === 'txt') actualFileType = 'text';
+    else if (fileExtension === 'html' || fileExtension === 'htm') actualFileType = 'html';
+
+    if (!actualFileType) {
+      console.warn("[useFileStore] Unsupported file type for:", uploadedFile.name);
+      return; // Exit if file type is not supported
+    }
+
+    const currentFileType = get().fileType;
 
     if (actualFileType === 'pdf') {
-      set(state => ({ 
-        pdfInstance: { file: uploadedFile, numPages: null }, // Reset numPages for new PDF
+      // For PDF, content is not stored as string, numPages will be set by onDocumentLoadSuccess
+      set(state => ({
+        pdfInstance: { file: uploadedFile, numPages: null }, // numPages set later
         // If current view is already PDF, update active file immediately
         activeFile: currentFileType === 'pdf' ? uploadedFile : state.activeFile,
-        activeNumPages: currentFileType === 'pdf' ? null : state.activeNumPages, 
-        // Clear text content if PDF is uploaded and PDF is active view
         activeFileContent: currentFileType === 'pdf' ? null : state.activeFileContent,
+        activeNumPages: currentFileType === 'pdf' ? null : state.activeNumPages, // Will be updated by onDocumentLoadSuccess
+        pdfNumPages: currentFileType === 'pdf' ? null : state.pdfNumPages, // Will be updated by onDocumentLoadSuccess
       }));
     } else if (actualFileType === 'text') {
-      set(state => ({ 
+      set(state => ({
         textInstance: { file: uploadedFile, content: uploadedContent },
         // If current view is already Text, update active file/content immediately
         activeFile: currentFileType === 'text' ? uploadedFile : state.activeFile,
         activeFileContent: currentFileType === 'text' ? uploadedContent : state.activeFileContent,
         // Clear numPages if Text is uploaded and Text is active view
         activeNumPages: currentFileType === 'text' ? null : state.activeNumPages,
+        pdfNumPages: currentFileType === 'text' ? null : state.pdfNumPages, // Clear pdfNumPages if text is active
       }));
     } else if (actualFileType === 'html') {
       set(state => ({ 
@@ -235,8 +237,9 @@ export const useFileStore = create<FileState & FileActions>((set, get) => ({
         // If current view is already HTML, update active file/content immediately
         activeFile: currentFileType === 'html' ? uploadedFile : state.activeFile,
         activeFileContent: currentFileType === 'html' ? uploadedContent : state.activeFileContent,
-        // Clear numPages if HTML is uploaded and HTML is active view
-        activeNumPages: currentFileType === 'html' ? null : state.activeNumPages,
+        // Clear numPages if HTML is uploaded and HTML is active view (numPages for HTML might be handled differently)
+        activeNumPages: currentFileType === 'html' ? null : state.activeNumPages, // HTML specific numPages might come later
+        pdfNumPages: currentFileType === 'html' ? null : state.pdfNumPages, // Clear pdfNumPages if html is active
       }));
     }
   },
@@ -244,8 +247,9 @@ export const useFileStore = create<FileState & FileActions>((set, get) => ({
   setPdfNumPagesForInstance: (pages) => {
     set(state => ({
       pdfInstance: { ...state.pdfInstance, numPages: pages },
-      // If the currently active file is this PDF instance, update activeNumPages too
+      // If the currently active file is this PDF instance, update activeNumPages and pdfNumPages
       activeNumPages: state.activeFile === state.pdfInstance.file ? pages : state.activeNumPages,
+      pdfNumPages: state.activeFile === state.pdfInstance.file ? pages : state.pdfNumPages,
     }));
   },
 
