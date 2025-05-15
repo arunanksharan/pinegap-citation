@@ -39,14 +39,14 @@ const FileViewer: React.FC = () => {
   }, [activeFile, fileType]);
 
   useEffect(() => {
-    if (activeFileContent && (fileType === 'text' || fileType === 'html')) {
+    if (activeFileContent && fileType === 'text') {
       const currentLines = activeFileContent.split('\n').map((line, index) => ({
         text: line,
         lineNumber: index + 1,
       }));
       console.log('[FileViewer] Lines for Fuse.js:', currentLines);
     } else {
-      console.log('[FileViewer] No active text/html content for lines.');
+      console.log('[FileViewer] No active text content for lines.');
     }
   }, [activeFileContent, fileType]);
 
@@ -86,7 +86,7 @@ const FileViewer: React.FC = () => {
   };
 
   const lines = useMemo(() => {
-    if (activeFileContent && (fileType === 'text' || fileType === 'html')) {
+    if (activeFileContent && fileType === 'text') {
       return activeFileContent
         .split('\n')
         .map((text, index) => ({ text, lineNumber: index + 1 }));
@@ -96,9 +96,10 @@ const FileViewer: React.FC = () => {
   }, [activeFileContent, fileType]);
 
   const fuseInstance = useMemo(() => {
-    if (!lines || lines.length === 0) return null;
+    // Ensure Fuse only runs for text files and if lines are available
+    if (fileType !== 'text' || !lines || lines.length === 0) return null; 
     console.log(
-      `[FileViewer] Fuse instance recomputing. Threshold: ${fuseScoreThreshold}, Lines count: ${lines.length}, CaseSensitive: ${isCaseSensitive}`
+      `[FileViewer] Fuse instance recomputing for TEXT. Threshold: ${fuseScoreThreshold}, Lines count: ${lines.length}, CaseSensitive: ${isCaseSensitive}`
     );
     // DIAGNOSTIC: Options adjusted for better substring matching
     return new Fuse(lines, {
@@ -110,7 +111,7 @@ const FileViewer: React.FC = () => {
       ignoreFieldNorm: true, // Disable field length penalty for long text matches
       isCaseSensitive: isCaseSensitive, // Use value from store
     });
-  }, [lines, fuseScoreThreshold, isCaseSensitive]); // Added isCaseSensitive back
+  }, [lines, fuseScoreThreshold, isCaseSensitive, fileType]); // Added fileType dependency
 
   const searchResults = useMemo(() => {
     console.log(

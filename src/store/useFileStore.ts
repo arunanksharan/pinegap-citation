@@ -48,11 +48,11 @@ interface HtmlFileState {
 
 // Main store structure
 interface FileState {
-  fileType: FileType | null;       // Currently selected file type in dropdown
-  activeFile: File | null;         // File object for FileViewer (can be PDF or Text file obj)
+  fileType: FileType | null; // Currently selected file type in dropdown
+  activeFile: File | null; // File object for FileViewer (can be PDF or Text file obj)
   activeFileContent: string | null; // Text content for FileViewer
-  activeNumPages: number | null;   // numPages for current active PDF in viewer
-  pdfNumPages: number | null;      // Total number of pages for the loaded PDF document, distinct from activeNumPages for UI elements like sliders
+  activeNumPages: number | null; // numPages for current active PDF in viewer
+  pdfNumPages: number | null; // Total number of pages for the loaded PDF document, distinct from activeNumPages for UI elements like sliders
 
   pdfInstance: PdfFileState;
   textInstance: TextFileState;
@@ -64,26 +64,40 @@ interface FileState {
 
   searchText: string;
   searchQueryForFuse: string; // Actual query to be used by Fuse.js, set on button click
-  thresholdForFuse: number;   // Actual threshold to be used by Fuse.js, set on button click
-  fuseScoreThreshold: number;    // Renamed from levenshteinThreshold, stores 0.0-1.0 score
+  thresholdForFuse: number; // Actual threshold to be used by Fuse.js, set on button click
+  fuseScoreThreshold: number; // Renamed from levenshteinThreshold, stores 0.0-1.0 score
   highlightColor: string;
   isMatchWholeWord: boolean;
   isCaseSensitive: boolean;
   fileInputKey: number; // Added for resetting file input
+  isFileProcessing: boolean; // New state for loading indicator
+  activeFileType: FileType | null;
 }
 
 interface FileActions {
   setFileType: (type: FileType | null) => void;
   // Action to set a newly uploaded file and its content, and update active states if type matches
-  setUploadedFileAndSyncActive: (uploadedFile: File | null, uploadedContent: string | null) => void;
+  setUploadedFileAndSyncActive: (
+    uploadedFile: File | null,
+    uploadedContent: string | null
+  ) => void;
   setPdfNumPagesForInstance: (pages: number | null) => void; // Updates pdfInstance.numPages
   setHtmlNumPagesForInstance: (pages: number | null) => void; // Updates htmlInstance.numPages
 
-  updatePdfParameter: <K extends keyof PdfParameters>(key: K, value: PdfParameters[K]) => void;
+  updatePdfParameter: <K extends keyof PdfParameters>(
+    key: K,
+    value: PdfParameters[K]
+  ) => void;
   setPdfParameters: (params: Partial<PdfParameters>) => void;
-  updateHtmlParameter: <K extends keyof HtmlParameters>(key: K, value: HtmlParameters[K]) => void;
+  updateHtmlParameter: <K extends keyof HtmlParameters>(
+    key: K,
+    value: HtmlParameters[K]
+  ) => void;
   setHtmlParameters: (params: Partial<HtmlParameters>) => void;
-  updateTextParameter: <K extends keyof TextParameters>(key: K, value: TextParameters[K]) => void;
+  updateTextParameter: <K extends keyof TextParameters>(
+    key: K,
+    value: TextParameters[K]
+  ) => void;
   setTextParameters: (params: Partial<TextParameters>) => void;
   setSearchText: (text: string) => void;
   triggerSearch: () => void; // New action to trigger search
@@ -94,6 +108,7 @@ interface FileActions {
   resetTextParameters: () => void;
   resetAllParameters: () => void;
   resetFileInput: () => void; // Added for resetting file input
+  setFileProcessing: (isProcessing: boolean) => void; // New action
 }
 
 const initialPdfParameters: PdfParameters = {
@@ -139,11 +154,13 @@ const initialFileStateOnly: FileState = {
   searchText: '',
   searchQueryForFuse: '',
   thresholdForFuse: 0.4, // Default to 0.4, will be updated by fuseScoreThreshold
-  fuseScoreThreshold: 0.4,   // Renamed, default float value 0.0-1.0
+  fuseScoreThreshold: 0.4, // Renamed, default float value 0.0-1.0
   highlightColor: '#FFFF00',
   isMatchWholeWord: true,
   isCaseSensitive: false,
   fileInputKey: 0, // Added for resetting file input
+  isFileProcessing: false, // New state for loading indicator
+  activeFileType: null,
 };
 
 export const useFileStore = create<FileState & FileActions>((set, get) => ({
@@ -202,10 +219,14 @@ export const useFileStore = create<FileState & FileActions>((set, get) => ({
 
     if (fileExtension === 'pdf') actualFileType = 'pdf';
     else if (fileExtension === 'txt') actualFileType = 'text';
-    else if (fileExtension === 'html' || fileExtension === 'htm') actualFileType = 'html';
+    else if (fileExtension === 'html' || fileExtension === 'htm')
+      actualFileType = 'html';
 
     if (!actualFileType) {
-      console.warn("[useFileStore] Unsupported file type for:", uploadedFile.name);
+      console.warn(
+        '[useFileStore] Unsupported file type for:',
+        uploadedFile.name
+      );
       return; // Exit if file type is not supported
     }
 
@@ -213,77 +234,116 @@ export const useFileStore = create<FileState & FileActions>((set, get) => ({
 
     if (actualFileType === 'pdf') {
       // For PDF, content is not stored as string, numPages will be set by onDocumentLoadSuccess
-      set(state => ({
+      set((state) => ({
         pdfInstance: { file: uploadedFile, numPages: null }, // numPages set later
         // If current view is already PDF, update active file immediately
         activeFile: currentFileType === 'pdf' ? uploadedFile : state.activeFile,
-        activeFileContent: currentFileType === 'pdf' ? null : state.activeFileContent,
+        activeFileContent:
+          currentFileType === 'pdf' ? null : state.activeFileContent,
         activeNumPages: currentFileType === 'pdf' ? null : state.activeNumPages, // Will be updated by onDocumentLoadSuccess
         pdfNumPages: currentFileType === 'pdf' ? null : state.pdfNumPages, // Will be updated by onDocumentLoadSuccess
+        isFileProcessing: true, // Start processing
       }));
     } else if (actualFileType === 'text') {
-      set(state => ({
+      set((state) => ({
         textInstance: { file: uploadedFile, content: uploadedContent },
         // If current view is already Text, update active file/content immediately
-        activeFile: currentFileType === 'text' ? uploadedFile : state.activeFile,
-        activeFileContent: currentFileType === 'text' ? uploadedContent : state.activeFileContent,
+        activeFile:
+          currentFileType === 'text' ? uploadedFile : state.activeFile,
+        activeFileContent:
+          currentFileType === 'text'
+            ? uploadedContent
+            : state.activeFileContent,
         // Clear numPages if Text is uploaded and Text is active view
-        activeNumPages: currentFileType === 'text' ? null : state.activeNumPages,
+        activeNumPages:
+          currentFileType === 'text' ? null : state.activeNumPages,
         pdfNumPages: currentFileType === 'text' ? null : state.pdfNumPages, // Clear pdfNumPages if text is active
+        isFileProcessing: true, // Start processing
       }));
     } else if (actualFileType === 'html') {
-      set(state => ({ 
-        htmlInstance: { file: uploadedFile, content: uploadedContent, numPages: null },
+      set((state) => ({
+        htmlInstance: {
+          file: uploadedFile,
+          content: uploadedContent,
+          numPages: null,
+        },
         // If current view is already HTML, update active file/content immediately
-        activeFile: currentFileType === 'html' ? uploadedFile : state.activeFile,
-        activeFileContent: currentFileType === 'html' ? uploadedContent : state.activeFileContent,
+        activeFile:
+          currentFileType === 'html' ? uploadedFile : state.activeFile,
+        activeFileContent:
+          currentFileType === 'html'
+            ? uploadedContent
+            : state.activeFileContent,
         // Clear numPages if HTML is uploaded and HTML is active view (numPages for HTML might be handled differently)
-        activeNumPages: currentFileType === 'html' ? null : state.activeNumPages, // HTML specific numPages might come later
+        activeNumPages:
+          currentFileType === 'html' ? null : state.activeNumPages, // HTML specific numPages might come later
         pdfNumPages: currentFileType === 'html' ? null : state.pdfNumPages, // Clear pdfNumPages if html is active
+        isFileProcessing: true, // Start processing
       }));
     }
   },
-  
+
   setPdfNumPagesForInstance: (pages) => {
-    set(state => ({
+    set((state) => ({
       pdfInstance: { ...state.pdfInstance, numPages: pages },
       // If the currently active file is this PDF instance, update activeNumPages and pdfNumPages
-      activeNumPages: state.activeFile === state.pdfInstance.file ? pages : state.activeNumPages,
-      pdfNumPages: state.activeFile === state.pdfInstance.file ? pages : state.pdfNumPages,
+      activeNumPages:
+        state.activeFile === state.pdfInstance.file
+          ? pages
+          : state.activeNumPages,
+      pdfNumPages:
+        state.activeFile === state.pdfInstance.file ? pages : state.pdfNumPages,
+      isFileProcessing: false, // Stop processing once numPages is known (doc loaded)
     }));
   },
 
   setHtmlNumPagesForInstance: (pages) => {
-    set(state => ({
+    set((state) => ({
       htmlInstance: { ...state.htmlInstance, numPages: pages },
       // If the currently active file is this HTML instance, update activeNumPages too
-      activeNumPages: state.activeFile === state.htmlInstance.file ? pages : state.activeNumPages,
+      activeNumPages:
+        state.activeFile === state.htmlInstance.file
+          ? pages
+          : state.activeNumPages,
     }));
   },
 
   updatePdfParameter: (key, value) =>
-    set((state) => ({ pdfParameters: { ...state.pdfParameters, [key]: value } })),
-  setPdfParameters: (params) => 
-    set((state) => ({ pdfParameters: { ...state.pdfParameters, ...params }})),
+    set((state) => ({
+      pdfParameters: { ...state.pdfParameters, [key]: value },
+    })),
+  setPdfParameters: (params) =>
+    set((state) => ({ pdfParameters: { ...state.pdfParameters, ...params } })),
   updateHtmlParameter: (key, value) =>
-    set((state) => ({ htmlParameters: { ...state.htmlParameters, [key]: value } })),
-  setHtmlParameters: (params) => 
-    set((state) => ({ htmlParameters: { ...state.htmlParameters, ...params }})),
+    set((state) => ({
+      htmlParameters: { ...state.htmlParameters, [key]: value },
+    })),
+  setHtmlParameters: (params) =>
+    set((state) => ({
+      htmlParameters: { ...state.htmlParameters, ...params },
+    })),
   updateTextParameter: (key, value) =>
-    set((state) => ({ textParameters: { ...state.textParameters, [key]: value } })),
-  setTextParameters: (params) => 
-    set((state) => ({ textParameters: { ...state.textParameters, ...params }})),
+    set((state) => ({
+      textParameters: { ...state.textParameters, [key]: value },
+    })),
+  setTextParameters: (params) =>
+    set((state) => ({
+      textParameters: { ...state.textParameters, ...params },
+    })),
   setSearchText: (text) => set({ searchText: text }),
   triggerSearch: () => {
     set((state) => {
-      console.log(`[useFileStore] Triggering search. searchText: '${state.searchText}', fuseScoreThreshold: ${state.fuseScoreThreshold}`);
+      console.log(
+        `[useFileStore] Triggering search. searchText: '${state.searchText}', fuseScoreThreshold: ${state.fuseScoreThreshold}`
+      );
       return {
         searchQueryForFuse: state.searchText,
         // thresholdForFuse is no longer the primary way FileViewer gets threshold for Fuse instance
       };
     });
   },
-  setFuseScoreThreshold: (value) => { // Renamed and updated logic
+  setFuseScoreThreshold: (value) => {
+    // Renamed and updated logic
     let numValue = parseFloat(value.toString());
     if (isNaN(numValue)) {
       numValue = 0.4; // Default if parsing fails
@@ -296,20 +356,24 @@ export const useFileStore = create<FileState & FileActions>((set, get) => ({
   setIsMatchWholeWord: (isMatchWholeWord) => set({ isMatchWholeWord }),
   setIsCaseSensitive: (isCaseSensitive) => set({ isCaseSensitive }),
 
-  resetTextParameters: () => set({
-    searchText: initialFileStateOnly.searchText,
-    searchQueryForFuse: initialFileStateOnly.searchQueryForFuse,
-    fuseScoreThreshold: initialFileStateOnly.fuseScoreThreshold, // Renamed
-    thresholdForFuse: initialFileStateOnly.fuseScoreThreshold, // Ensure this also uses the correct initial float value
-    highlightColor: initialFileStateOnly.highlightColor,
-    isMatchWholeWord: initialFileStateOnly.isMatchWholeWord,
-    isCaseSensitive: initialFileStateOnly.isCaseSensitive,
-  }),
+  resetTextParameters: () =>
+    set({
+      searchText: initialFileStateOnly.searchText,
+      searchQueryForFuse: initialFileStateOnly.searchQueryForFuse,
+      fuseScoreThreshold: initialFileStateOnly.fuseScoreThreshold, // Renamed
+      thresholdForFuse: initialFileStateOnly.fuseScoreThreshold, // Ensure this also uses the correct initial float value
+      highlightColor: initialFileStateOnly.highlightColor,
+      isMatchWholeWord: initialFileStateOnly.isMatchWholeWord,
+      isCaseSensitive: initialFileStateOnly.isCaseSensitive,
+    }),
   resetAllParameters: () => {
     // When resetting all, also clear the active file type choice
     get().setFileType(null); // This will clear activeFile, activeFileContent, activeNumPages
     set(initialFileStateOnly); // Then reset all instances and parameters
     get().resetFileInput(); // Ensure file input is also reset
   },
-  resetFileInput: () => set((state) => ({ fileInputKey: state.fileInputKey + 1 })), // Added implementation
+  resetFileInput: () =>
+    set((state) => ({ fileInputKey: state.fileInputKey + 1 })), // Added implementation
+  setFileProcessing: (isProcessing: boolean) =>
+    set({ isFileProcessing: isProcessing }),
 }));
