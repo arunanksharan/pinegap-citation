@@ -298,8 +298,8 @@ const FileViewer: React.FC = () => {
                           onPageLoadSuccess(pageProxy);
                         }
                       }}
-                      renderTextLayer={false} // Kept false for diagnostics
-                      renderAnnotationLayer={false} // Temporarily set to false for diagnostics
+                      renderTextLayer={true} // Enable text layer for selection
+                      renderAnnotationLayer={true} // Enable annotation layer
                       // customTextRenderer removed to use default react-pdf text layer rendering
                     />
                     {/* Render BoundingBox only on the specified page */}
