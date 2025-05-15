@@ -163,6 +163,55 @@ const FileViewer: React.FC = () => {
   }, [searchQueryForFuse, fuseInstance, fuseScoreThreshold, lines]);
 
   const renderLineWithHighlights = (lineText: string, lineNumber: number) => {
+    // ---- START: Exact search logic for fileType 'text' ----
+    if (fileType === 'text') {
+      if (!searchQueryForFuse || searchQueryForFuse.trim() === '') {
+        return <div key={lineNumber}>{lineText}</div>;
+      }
+
+      const parts: React.ReactNode[] = [];
+      let lastIndex = 0;
+      const searchTerm = searchQueryForFuse;
+      const textToSearch = lineText;
+
+      const effectiveSearchTerm = isCaseSensitive ? searchTerm : searchTerm.toLowerCase();
+      const effectiveTextToSearch = isCaseSensitive ? textToSearch : textToSearch.toLowerCase();
+
+      let currentIndex = effectiveTextToSearch.indexOf(effectiveSearchTerm, lastIndex);
+
+      while (currentIndex !== -1) {
+        // Add the part before the match
+        if (currentIndex > lastIndex) {
+          parts.push(textToSearch.substring(lastIndex, currentIndex));
+        }
+        // Add the highlighted match (using original casing from textToSearch)
+        parts.push(
+          <mark
+            key={`match-${lineNumber}-${currentIndex}`}
+            style={{ backgroundColor: highlightColor, color: 'black' }}
+          >
+            {textToSearch.substring(currentIndex, currentIndex + searchTerm.length)}
+          </mark>
+        );
+        lastIndex = currentIndex + searchTerm.length;
+        currentIndex = effectiveTextToSearch.indexOf(effectiveSearchTerm, lastIndex);
+      }
+
+      // Add the remaining part of the line
+      if (lastIndex < textToSearch.length) {
+        parts.push(textToSearch.substring(lastIndex));
+      }
+
+      return <div key={lineNumber}>{parts.length > 0 ? parts : lineText}</div>;
+    }
+    // ---- END: Exact search logic for fileType 'text' ----
+
+    // ---- START: Fallback to existing Fuse.js logic for other types (e.g., HTML if it used this) ----
+    // This part remains from the previous implementation for non-text types
+    if (!searchQueryForFuse || !fuseInstance) {
+      return <div key={lineNumber}>{lineText}</div>;
+    }
+
     const matchesOnThisLine = searchResults.filter(
       (match) => match.lineNumber === lineNumber
     );

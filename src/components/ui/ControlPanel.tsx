@@ -1,7 +1,12 @@
 'use client';
 
 import React, { useRef, useState, useEffect } from 'react';
-import { useFileStore, FileType, PdfParameters, HtmlParameters } from '@/store/useFileStore';
+import {
+  useFileStore,
+  FileType,
+  PdfParameters,
+  HtmlParameters,
+} from '@/store/useFileStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -56,12 +61,15 @@ const ControlPanel: React.FC = () => {
   useEffect(() => {
     const storeValStr = pdfParameters.scale.toString();
 
-    if (scaleDisplayValue.endsWith('.') && Number(scaleDisplayValue.slice(0, -1)) === pdfParameters.scale) {
+    if (
+      scaleDisplayValue.endsWith('.') &&
+      Number(scaleDisplayValue.slice(0, -1)) === pdfParameters.scale
+    ) {
       return;
     }
 
-    if (scaleDisplayValue.trim() === "" && pdfParameters.scale === 1) {
-      setScaleDisplayValue("1");
+    if (scaleDisplayValue.trim() === '' && pdfParameters.scale === 1) {
+      setScaleDisplayValue('1');
       return;
     }
 
@@ -72,11 +80,14 @@ const ControlPanel: React.FC = () => {
 
   useEffect(() => {
     const storeValStr = htmlParameters.scale.toString();
-    if (htmlScaleDisplayValue.endsWith('.') && Number(htmlScaleDisplayValue.slice(0, -1)) === htmlParameters.scale) {
+    if (
+      htmlScaleDisplayValue.endsWith('.') &&
+      Number(htmlScaleDisplayValue.slice(0, -1)) === htmlParameters.scale
+    ) {
       return;
     }
-    if (htmlScaleDisplayValue.trim() === "" && htmlParameters.scale === 1) {
-      setHtmlScaleDisplayValue("1");
+    if (htmlScaleDisplayValue.trim() === '' && htmlParameters.scale === 1) {
+      setHtmlScaleDisplayValue('1');
       return;
     }
     if (htmlScaleDisplayValue !== storeValStr) {
@@ -86,10 +97,13 @@ const ControlPanel: React.FC = () => {
 
   useEffect(() => {
     const storeValStr = fuseScoreThreshold.toString();
-    if (thresholdDisplayValue.endsWith('.') && Number(thresholdDisplayValue.slice(0, -1)) === fuseScoreThreshold) {
+    if (
+      thresholdDisplayValue.endsWith('.') &&
+      Number(thresholdDisplayValue.slice(0, -1)) === fuseScoreThreshold
+    ) {
       return;
     }
-    if (thresholdDisplayValue.trim() === "" && fuseScoreThreshold === 0.4) {
+    if (thresholdDisplayValue.trim() === '' && fuseScoreThreshold === 0.4) {
       setThresholdDisplayValue(fuseScoreThreshold.toString());
       return;
     }
@@ -98,7 +112,9 @@ const ControlPanel: React.FC = () => {
     }
   }, [fuseScoreThreshold, thresholdDisplayValue]);
 
-  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
     const file = event.target.files?.[0];
     if (file) {
       const currentSelectedType = useFileStore.getState().fileType;
@@ -159,10 +175,7 @@ const ControlPanel: React.FC = () => {
     }
   };
 
-  const handleParameterChange = (
-    key: keyof PdfParameters,
-    value: string
-  ) => {
+  const handleParameterChange = (key: keyof PdfParameters, value: string) => {
     const numericKeys: Array<keyof PdfParameters> = [
       'pageNumber',
       'x',
@@ -198,7 +211,10 @@ const ControlPanel: React.FC = () => {
     if (numericKeys.includes(key)) {
       const numValue = parseInt(value, 10);
       if (!isNaN(numValue)) {
-        updateHtmlParameter(key, numValue as HtmlParameters[keyof HtmlParameters]);
+        updateHtmlParameter(
+          key,
+          numValue as HtmlParameters[keyof HtmlParameters]
+        );
       } else if (value === '') {
         updateHtmlParameter(key, 0 as number);
       }
@@ -210,7 +226,7 @@ const ControlPanel: React.FC = () => {
     setScaleDisplayValue(newValue);
 
     const trimmedValue = newValue.trim();
-    if (trimmedValue === "") {
+    if (trimmedValue === '') {
       updatePdfParameter('scale', 1);
     } else if (!trimmedValue.endsWith('.')) {
       const num = Number(trimmedValue);
@@ -220,7 +236,9 @@ const ControlPanel: React.FC = () => {
     }
   };
 
-  const handleHtmlScaleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleHtmlScaleInputChange = (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
     const val = e.target.value;
     setHtmlScaleDisplayValue(val);
 
@@ -229,16 +247,16 @@ const ControlPanel: React.FC = () => {
       const newScale = parseFloat(val);
       if (!isNaN(newScale) && newScale > 0) {
         updateHtmlParameter('scale', newScale);
-      } else if (val.trim() !== "" && isNaN(newScale)) {
+      } else if (val.trim() !== '' && isNaN(newScale)) {
       }
     }
   };
 
   const handleScaleInputBlur = () => {
     const trimmedValue = scaleDisplayValue.trim();
-    if (trimmedValue === "") {
+    if (trimmedValue === '') {
       updatePdfParameter('scale', 1);
-      setScaleDisplayValue("1");
+      setScaleDisplayValue('1');
     } else {
       const num = Number(trimmedValue);
       if (!isNaN(num)) {
@@ -246,7 +264,7 @@ const ControlPanel: React.FC = () => {
         setScaleDisplayValue(num.toString());
       } else {
         updatePdfParameter('scale', 1);
-        setScaleDisplayValue("1");
+        setScaleDisplayValue('1');
       }
     }
   };
@@ -258,16 +276,20 @@ const ControlPanel: React.FC = () => {
       setHtmlScaleDisplayValue(newScale.toString());
     }
     updateHtmlParameter('scale', newScale);
-    setHtmlScaleDisplayValue(useFileStore.getState().htmlParameters.scale.toString());
+    setHtmlScaleDisplayValue(
+      useFileStore.getState().htmlParameters.scale.toString()
+    );
   };
 
-  const handleThresholdInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleThresholdInputChange = (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
     const { value } = e.target;
 
-    if (value === "" || /^[0-9]*\.?([0-9]+)?$/.test(value)) {
+    if (value === '' || /^[0-9]*\.?([0-9]+)?$/.test(value)) {
       setThresholdDisplayValue(value);
 
-      if (!value.endsWith('.') && value.trim() !== "") {
+      if (!value.endsWith('.') && value.trim() !== '') {
         const numVal = parseFloat(value);
         if (!isNaN(numVal)) {
           setFuseScoreThreshold(numVal);
@@ -284,7 +306,9 @@ const ControlPanel: React.FC = () => {
     } else {
       setFuseScoreThreshold(numValue);
     }
-    setThresholdDisplayValue(useFileStore.getState().fuseScoreThreshold.toString());
+    setThresholdDisplayValue(
+      useFileStore.getState().fuseScoreThreshold.toString()
+    );
   };
 
   const handleReset = () => {
@@ -354,9 +378,11 @@ const ControlPanel: React.FC = () => {
             <Label htmlFor="searchText">Search Text</Label>
             <Textarea
               id="searchText"
-              placeholder="Enter text for fuzzy search..."
+              placeholder="Enter text for exact search..."
               value={searchText}
-              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setSearchText(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                setSearchText(e.target.value)
+              }
               className="w-full"
               rows={3}
             />
@@ -364,8 +390,10 @@ const ControlPanel: React.FC = () => {
               Search
             </Button>
           </div>
-          <div className="space-y-1">
-            <Label htmlFor="fuseScoreThreshold">Match Score Threshold (0.0 - 1.0)</Label>
+          {/* <div className="space-y-1">
+            <Label htmlFor="fuseScoreThreshold">
+              Match Score Threshold (0.0 - 1.0)
+            </Label>
             <Input
               id="fuseScoreThreshold"
               type="text"
@@ -374,7 +402,7 @@ const ControlPanel: React.FC = () => {
               onBlur={handleThresholdInputBlur}
               placeholder="e.g., 0.4 (0.0=exact, 1.0=any)"
             />
-          </div>
+          </div> */}
           <div className="space-y-1">
             <Label htmlFor="highlightColor">Highlight Color</Label>
             <Input
@@ -384,15 +412,19 @@ const ControlPanel: React.FC = () => {
               onChange={(e) => setHighlightColor(e.target.value)}
             />
           </div>
-          <div className="flex items-center space-x-2">
+          {/* <div className="flex items-center space-x-2">
             <Switch
               id="caseSensitive"
               checked={isCaseSensitive}
               onCheckedChange={setIsCaseSensitive}
             />
             <Label htmlFor="caseSensitive">Case Sensitive</Label>
-          </div>
-          <Button onClick={resetTextParameters} variant="outline" className="w-full">
+          </div> */}
+          <Button
+            onClick={resetTextParameters}
+            variant="outline"
+            className="w-full"
+          >
             Reset Text Parameters
           </Button>
         </div>
@@ -457,7 +489,9 @@ const ControlPanel: React.FC = () => {
                       id={`html-${key}`}
                       type="text"
                       value={htmlParameters[key]?.toString() || ''}
-                      onChange={(e) => handleHtmlParameterChange(key, e.target.value)}
+                      onChange={(e) =>
+                        handleHtmlParameterChange(key, e.target.value)
+                      }
                       placeholder={`Enter ${key.toLowerCase()}`}
                     />
                   )}
